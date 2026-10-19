@@ -2,7 +2,8 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Chog Conviction",
+  title: "ChogXBet",
+  icons: { icon: "/chog-logo.png" },
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
