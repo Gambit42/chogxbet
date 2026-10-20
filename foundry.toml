@@ -1,0 +1,18 @@
+[profile.default]
+src = "contracts/src"
+test = "contracts/test"
+script = "contracts/script"
+out = "contracts/out"
+cache_path = "contracts/cache"
+libs = ["node_modules"]
+remappings = ["@openzeppelin/contracts/=node_modules/@openzeppelin/contracts/"]
+solc = "0.8.30"
+evm_version = "prague"
+# MonadVision (Sourcify) verification needs literal sources and no IPFS hash.
+cbor_metadata = true
+bytecode_hash = "none"
+use_literal_content = true
+
+[rpc_endpoints]
+monad_testnet = "https://testnet-rpc.monad.xyz"
+monad = "https://rpc.monad.xyz"
