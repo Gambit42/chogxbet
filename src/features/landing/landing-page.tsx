@@ -3,22 +3,19 @@ import HeroSection from "./components/hero-section";
 import HowItWorksSection from "./components/how-it-works-section";
 import BurnSection from "./components/burn-section";
 import ShareSection from "./components/share-section";
-import LiveDuelsSection from "./components/live-duels-section";
 import FaqSection from "./components/faq-section";
 import CtaSection from "./components/cta-section";
 import LandingFooter from "./components/landing-footer";
-import "./landing.css";
 
 export default function LandingPage() {
   return (
-    <div className="landing">
+    <div className="bg-[#faf9fc] font-sans leading-normal text-[#1a1130] antialiased [&_a:focus-visible]:outline-[3px] [&_a:focus-visible]:outline-offset-4 [&_a:focus-visible]:outline-[#6e56e8] [&_a:hover]:brightness-[.92]">
       <LandingHeader />
       <main>
         <HeroSection />
         <HowItWorksSection />
         <BurnSection />
         <ShareSection />
-        <LiveDuelsSection />
         <FaqSection />
         <CtaSection />
       </main>

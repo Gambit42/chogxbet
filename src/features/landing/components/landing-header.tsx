@@ -1,11 +1,22 @@
 import { Container } from "@/components/ui/container";
 /* eslint-disable @next/next/no-img-element -- Preserve the supplied artwork at its original dimensions. */
 export default function LandingHeader() {
-    return (<header className="landing-header" style={{ "position": "sticky", "top": "0", "zIndex": "10", "background": "rgba(255,255,255,.9)", "backdropFilter": "blur(10px)", "borderBottom": "1px solid #ECE8F3" }}>
-  <Container style={{ "paddingTop": "14px", "paddingBottom": "14px", "display": "flex", "alignItems": "center", "gap": "32px" }}>
-    <div style={{ "display": "flex", "alignItems": "center", "gap": "10px", "fontWeight": "600", "fontSize": "16px" }}><img alt="ChogXBet logo" src="/chog-logo.png" style={{ "width": "64px", "height": "64px", "borderRadius": "14px", "flexShrink": "0" }}/>ChogXBet</div>
-    <nav aria-label="Main navigation" style={{ "display": "flex", "gap": "24px", "fontSize": "14px" }}><a href="#how" style={{ "color": "#6B6185" }}>How it works</a><a href="#burn" style={{ "color": "#6B6185" }}>The burn</a><a href="#duels" style={{ "color": "#6B6185" }}>Live duels</a><a href="#faq" style={{ "color": "#6B6185" }}>FAQ</a></nav>
-    <div style={{ "marginLeft": "auto", "display": "flex", "gap": "10px" }}><a href="https://nad.fun/tokens/0x350035555E10d9AfAF1566AaebfCeD5BA6C27777" style={{ "padding": "9px 14px", "borderRadius": "8px", "border": "1px solid #DCD5EC", "background": "#fff", "color": "#1A1130", "fontWeight": "500", "fontSize": "14px" }}>Get $Chog</a><a href="/app" style={{ "padding": "9px 16px", "borderRadius": "8px", "background": "#6E56E8", "color": "#fff", "fontWeight": "600", "fontSize": "14px" }}>Launch app</a></div>
-  </Container>
-    </header>);
+  return (
+    <header className="sticky top-0 z-10 border-b border-[#ECE8F3] bg-white/90 backdrop-blur-[10px]">
+      <Container className="flex items-center gap-8 py-3.5 max-[900px]:flex-wrap max-[900px]:gap-4 max-sm:gap-2.5 max-sm:py-3">
+        <div className="flex items-center gap-2.5 text-[17px] font-semibold tracking-[-.01em]">
+          <img alt="ChogXBet logo" src="/chog-logo.png" className="size-10 shrink-0 rounded-[10px]" />
+          ChogXBet
+        </div>
+        <nav aria-label="Main navigation" className="flex gap-6 text-[15px] font-medium text-[#6B6185] max-[900px]:order-3 max-[900px]:w-full max-[900px]:flex-wrap max-[900px]:justify-center max-[900px]:gap-5">
+          <a href="#how">How it works</a>
+          <a href="#burn">The burn</a>
+          <a href="#faq">FAQ</a>
+        </nav>
+        <a href="/app" className="ml-auto rounded-lg bg-[#6E56E8] px-4 py-[9px] text-[14px] font-semibold text-white max-sm:px-2.5 max-sm:py-2">
+          Launch app
+        </a>
+      </Container>
+    </header>
+  );
 }

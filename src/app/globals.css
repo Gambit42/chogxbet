@@ -48,25 +48,26 @@
   --radius-4xl: calc(var(--radius) * 2.6);
 }
 
+/* Chog palette: ink #1A1130, violet #6E56E8, lilac lines #ECE8F3/#DCD5EC, lilac wash #F1EEFB. */
 :root {
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.145 0 0);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.145 0 0);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.145 0 0);
-  --primary: oklch(0.205 0 0);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.97 0 0);
-  --secondary-foreground: oklch(0.205 0 0);
-  --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.556 0 0);
-  --accent: oklch(0.97 0 0);
-  --accent-foreground: oklch(0.205 0 0);
-  --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.922 0 0);
-  --input: oklch(0.922 0 0);
-  --ring: oklch(0.708 0 0);
+  --background: #ffffff;
+  --foreground: #1a1130;
+  --card: #ffffff;
+  --card-foreground: #1a1130;
+  --popover: #ffffff;
+  --popover-foreground: #1a1130;
+  --primary: #6e56e8;
+  --primary-foreground: #ffffff;
+  --secondary: #f1eefb;
+  --secondary-foreground: #1a1130;
+  --muted: #f1eefb;
+  --muted-foreground: #6b6185;
+  --accent: #f1eefb;
+  --accent-foreground: #1a1130;
+  --destructive: #c43a52;
+  --border: #ece8f3;
+  --input: #dcd5ec;
+  --ring: #6e56e8;
   --chart-1: oklch(0.87 0 0);
   --chart-2: oklch(0.556 0 0);
   --chart-3: oklch(0.439 0 0);
@@ -127,5 +128,9 @@
   }
   html {
     @apply font-sans;
+  }
+  /* Tailwind v4 no longer sets this on buttons. */
+  button:not(:disabled), [role="button"]:not([aria-disabled="true"]), summary, select {
+    cursor: pointer;
   }
 }

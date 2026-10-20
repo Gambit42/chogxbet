@@ -1,5 +1,5 @@
-import BettingApp from "@/features/betting/betting-app";
+import { Arena } from "@/features/betting/arena";
 
-export default function AppPage() {
-  return <BettingApp />;
+export default function ArenaPage() {
+  return <Arena />;
 }
