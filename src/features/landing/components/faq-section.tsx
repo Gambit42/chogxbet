@@ -1,7 +1,7 @@
 export default function FaqSection() {
     return (<section id="faq" data-screen-label="FAQ" style={{ "background": "#fff", "borderTop": "1px solid #ECE8F3" }}>
   <div style={{ "maxWidth": "820px", "margin": "0 auto", "padding": "88px 24px" }}>
-    <h2 style={{ "margin": "0", "font": "600 40px/1.05 'Geist'", "letterSpacing": "-.035em" }}>Questions</h2>
+    <h2 style={{ "margin": "0", "font": "600 40px/1.05 var(--font-geist)", "letterSpacing": "-.035em" }}>Questions</h2>
     <div style={{ "marginTop": "32px", "borderTop": "1px solid #ECE8F3" }}>
       
         <div style={{ "padding": "20px 0", "borderBottom": "1px solid #ECE8F3" }}><div style={{ "fontWeight": "600", "fontSize": "17px" }}>What do I need to play?</div><p style={{ "margin": "8px 0 0", "fontSize": "15px", "lineHeight": "1.6", "color": "#6B6185" }}>A wallet on Monad holding at least one Chog and enough $CHOG to cover your stake plus gas.</p></div>

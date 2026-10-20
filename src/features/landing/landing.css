@@ -1,8 +1,7 @@
-@import url("https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500&display=swap");
 .landing {
   background: #faf9fc;
   color: #1a1130;
-  font-family: "Geist", Arial, Helvetica, sans-serif;
+  font-family: var(--font-geist), Arial, Helvetica, sans-serif;
   line-height: normal;
   -webkit-font-smoothing: antialiased;
 }
@@ -16,10 +15,10 @@
   .landing-header nav { order: 3; width: 100%; justify-content: center; flex-wrap: wrap; gap: 20px !important; }
 }
 @media (max-width: 640px) {
-  .landing-header > div { padding: 12px 16px !important; gap: 10px !important; }
+  .landing-header > div { padding-block: 12px !important; gap: 10px !important; }
   .landing-header > div > div:last-child { gap: 6px !important; }
   .landing-header > div > div:last-child a { padding: 8px 10px !important; }
-  .landing-hero { padding: 48px 20px !important; }
+  .landing-hero { padding-block: 48px !important; }
   .hero-duel { grid-template-columns: minmax(0, 1fr) !important; gap: 16px; margin-top: 40px !important; }
   .hero-duel > div { min-width: 0; }
   .hero-duel > div:nth-child(2) { padding: 0; }
@@ -29,6 +28,6 @@
   .landing-stats > div:nth-child(n+3) { border-top: 1px solid #ece8f3; }
   .landing section:not(.landing-hero) { padding-top: 56px !important; padding-bottom: 56px !important; }
   .landing section > div { min-width: 0; }
-  .landing section[data-screen-label="CTA"] > div { padding: 32px 24px !important; }
+  .landing section[data-screen-label="CTA"] > div { padding-block: 32px !important; }
   .landing footer span:last-child { margin-left: 0 !important; width: 100%; }
 }
