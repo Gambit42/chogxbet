@@ -19,7 +19,7 @@ export default function ShareSection() {
           <div className="mt-3.5 overflow-hidden rounded-[14px] border border-[#ECE8F3] bg-white">
             {/* A saved render of /og?asset=BTC&call=above $100,000&when=by Dec 31&stake=25K $CHOG&win=47.5K&chog=11 */}
             <img alt="BTC will be above $100,000 by Dec 31, 25K $CHOG duel" src="/card-btc.webp" width={1200} height={630} loading="lazy" className="block h-auto w-full" />
-            <div className="px-3.5 py-[9px] text-[13px] text-[#8E85A3]">conviction.chog.xyz/d/7f3k</div>
+            <div className="px-3.5 py-[9px] text-[13px] text-[#8E85A3]">chogxbet.xyz/d/7f3k</div>
           </div>
         </div>
         <div className="min-w-0">

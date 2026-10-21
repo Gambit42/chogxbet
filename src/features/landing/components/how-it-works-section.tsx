@@ -21,7 +21,7 @@ const STEPS: { title: string; body: string; demo: ReactNode }[] = [
     body: "Post it on X or in Discord. The first wallet to match your stake takes the other side.",
     demo: (
       <div className="flex items-center gap-2 rounded-[10px] border border-[#ECE8F3] bg-white px-3 py-2.5 font-mono text-[13px] text-[#6B6185]">
-        <span className="flex-1">conviction.chog.xyz/d/7f3k</span>
+        <span className="flex-1">chogxbet.xyz/d/7f3k</span>
         <span className="font-sans font-semibold text-[#6E56E8]">Copy</span>
       </div>
     ),
