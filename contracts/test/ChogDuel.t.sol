@@ -2,8 +2,9 @@
 pragma solidity ^0.8.24;
 
 import {ChogDuel} from "../src/ChogDuel.sol";
-import {MockChog} from "../src/MockChog.sol";
-import {MockChogNFT} from "../src/MockChogNFT.sol";
+import {MockChog} from "../src/testnet/MockChog.sol";
+import {MockChogNFT} from "../src/testnet/MockChogNFT.sol";
+import {FeedMirror} from "../src/testnet/FeedMirror.sol";
 
 // Cheatcodes, declared here so the test needs no forge-std.
 interface Vm {
@@ -111,7 +112,7 @@ contract ChogDuelTest {
         vm.expectRevert("wrong MON amount");
         duel.create{value: 0.5 ether}(address(0), 1 ether, address(feed), true, 5e8, deadline);
         vm.expectRevert("deadline too soon");
-        duel.create{value: 1 ether}(address(0), 1 ether, address(feed), true, 5e8, uint64(block.timestamp + 10 minutes));
+        duel.create{value: 1 ether}(address(0), 1 ether, address(feed), true, 5e8, uint64(block.timestamp + 1 minutes));
         vm.expectRevert("unsupported token");
         duel.create(address(nft), 1 ether, address(feed), true, 5e8, deadline);
         vm.expectRevert("unsupported feed");
@@ -152,7 +153,7 @@ contract ChogDuelTest {
     function test_acceptCutoff() public {
         vm.prank(alice);
         uint256 id = duel.create{value: 1 ether}(address(0), 1 ether, address(feed), true, 5e8, deadline);
-        vm.warp(deadline - 9 minutes);
+        vm.warp(deadline - 20 seconds);
         vm.prank(bob);
         vm.expectRevert("too late to accept");
         duel.accept{value: 1 ether}(id);
@@ -227,6 +228,18 @@ contract ChogDuelTest {
         require(duel.owed(address(0), alice) == 1 ether && duel.owed(address(0), bob) == 1 ether, "not refunded");
         vm.expectRevert("not accepted");
         duel.refund(id);
+    }
+
+    function test_feedMirror() public {
+        FeedMirror m = new FeedMirror(address(this));
+        m.push(5, 8e12, 100);
+        (uint80 id, int256 p,, uint256 at,) = m.getRoundData(5);
+        require(id == 5 && p == 8e12 && at == 100, "round not stored");
+        vm.expectRevert("round already set");
+        m.push(5, 1, 200);
+        vm.prank(alice);
+        vm.expectRevert("not updater");
+        m.push(6, 1, 200);
     }
 
     function test_faucetCaps() public {

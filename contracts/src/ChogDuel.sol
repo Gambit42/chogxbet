@@ -19,9 +19,9 @@ contract ChogDuel is ReentrancyGuard {
     using SafeERC20 for IERC20;
 
     /// The earliest deadline a call may have, so there's time for someone to accept.
-    uint256 public constant MIN_LEAD = 1 hours;
+    uint256 public constant MIN_LEAD = 2 minutes;
     /// The seat closes this long before the deadline, so nobody accepts once the outcome is near-certain.
-    uint256 public constant ACCEPT_CUTOFF = 10 minutes;
+    uint256 public constant ACCEPT_CUTOFF = 30 seconds;
     /// An accepted duel not settled within this long after its deadline refunds both stakes instead.
     uint256 public constant SETTLE_WINDOW = 24 hours;
     /// 5% of the pot: $CHOG is burned, MON goes to the treasury ($CHOG buyback fund).
