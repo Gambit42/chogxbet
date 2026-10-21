@@ -8,7 +8,7 @@ Built for a hackathon, running on **Monad testnet**.
 
 1. **Get set up.** Log in with Privy, then use the faucet at `/app/faucet` to mint test $CHOG and a test Chog NFT. You need a Chog to play.
 2. **Make a call.** Pick an asset (MON, BTC, SOL, ETH), above or below a target, a deadline and a stake. Leave the seat open to any Chog holder, or challenge one specific Chog.
-3. **Share it.** Every duel has its own page with a generated share card (`/og`) for X and Discord previews.
+3. **Share it.** Every duel has its own page with a generated share card (`/og`) for X and Discord previews. Cards are cached, so a link that has been previewed once loads instantly after that.
 4. **Take a call.** Browse open calls in the Arena and match the stake. Seats close 30 seconds before the deadline.
 5. **Settle.** After the deadline, the settle bot submits the first Chainlink round at or after it. The contract checks it really is that round and pays the winner. A tie refunds both stakes with no fee.
 6. **Claim.** Winnings and refunds wait in the escrow until you claim them from the duel page. If a duel isn't settled within 24 hours, either player can refund both stakes.
