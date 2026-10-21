@@ -134,7 +134,8 @@ export function WalletProviders({ children }: { children: ReactNode }) {
       appId={appId!}
       config={{
         appearance: { theme: "light", accentColor: "#6E56E8", logo: "/chog-logo.png" },
-        embeddedWallets: { ethereum: { createOnLogin: "users-without-wallets" } },
+        // Our buttons + sonner are the tx UX; Privy's confirm/"All done" modals just duplicate them.
+        embeddedWallets: { ethereum: { createOnLogin: "users-without-wallets" }, showWalletUIs: false },
         defaultChain: NETWORKS[network].chain,
         supportedChains: [monad, monadTestnet],
       }}

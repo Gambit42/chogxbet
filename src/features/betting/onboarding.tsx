@@ -31,23 +31,24 @@ export function useOnboarding() {
         ? "Free from Monad's faucet. Pays the gas, and you can stake it on calls."
         : "Pays the gas, and you can stake it on calls. Buy it on an exchange and send it to your wallet.",
       done: has(w.monBalance),
-      action: isTestnet ? { label: "Open faucet", href: "/app/faucet" } : undefined,
+      action: isTestnet ? { label: "Open faucet", href: "https://faucet.monad.xyz" } : undefined,
     },
     ...(net.nft
       ? [{
           title: "Hold a Chog NFT",
           blurb: "Your ticket into the Arena. Both sides of every duel need one.",
           done: has(w.chogNfts),
-          action: isTestnet ? { label: "Mint a test Chog", href: net.getNft } : { label: "Buy on OpenSea", href: net.getNft },
+          action: isTestnet ? { label: "Open faucet", href: net.getNft } : { label: "Buy on OpenSea", href: net.getNft },
         }]
       : []),
-    ...(net.chog
+    // Testnet $CHOG lives on the faucet page only.
+    ...(net.chog && !isTestnet
       ? [{
-          title: isTestnet ? "Get test $CHOG" : "Get $CHOG",
+          title: "Get $CHOG",
           blurb: "Stake in $CHOG instead of MON if you like.",
           done: has(w.chogBalance),
           optional: true,
-          action: isTestnet ? { label: "Open faucet", href: net.getChog } : { label: "Buy on nad.fun", href: net.getChog },
+          action: { label: "Buy on nad.fun", href: net.getChog },
         }]
       : []),
   ];

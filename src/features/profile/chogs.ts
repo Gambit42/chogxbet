@@ -12,7 +12,7 @@ export const nftAbi = parseAbi([
   "function tokenURI(uint256) view returns (string)",
 ]);
 
-export const ipfs = (uri: string) => uri.replace("ipfs://", "https://gateway.pinata.cloud/ipfs/");
+export const ipfs = (uri: string) => uri.replace("ipfs://", "https://ipfs.filebase.io/ipfs/");
 
 export type Meta = { name: string; image: string; attributes?: { trait_type: string; value: string }[] };
 /** `pending` stays true until the metadata loads or fails, so callers can hold a placeholder. */

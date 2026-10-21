@@ -27,10 +27,12 @@ export const NETWORKS = {
     chog: process.env.NEXT_PUBLIC_CHOG_ADDRESS as Address | undefined,
     nft: process.env.NEXT_PUBLIC_CHOG_NFT_ADDRESS as Address | undefined,
     duel: process.env.NEXT_PUBLIC_DUEL_ADDRESS as Address | undefined,
-    // Chainlink has no MON or SOL feed on testnet. Keep in sync with contracts/script/DeployDuel.s.sol.
+    // FeedMirrors (contracts/src/testnet) the settle cron fills with mainnet Chainlink rounds; deployed by DeployDuel.s.sol 2026-10-21.
     feeds: {
-      BTC: "0x12C0F44368a02081ce58a936d1C1F606BB301715",
-      ETH: "0x5c8c8482f064049248F86D9F4aFa4B1f2F5b6d31",
+      MON: "0xaD3CE91127Efa66165e75BaCfdb59F7c6c832eb4",
+      BTC: "0x7E51eF77F3631f562FBa2b81C4B75F68DB9A1693",
+      SOL: "0xDb42EA9922529f9E3552Be153e1AB1A1Ba980DDC",
+      ETH: "0xBF74B354Fd760A3dbE8C3516E0Efd65B5858ebC7",
     } as Partial<Record<string, Address>>,
     getChog: "/app/faucet",
     getNft: "/app/faucet",

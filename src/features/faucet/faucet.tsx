@@ -2,7 +2,7 @@
 /* eslint-disable @next/next/no-img-element -- Use the supplied Chog artwork. */
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
-import { Check, ExternalLink } from "lucide-react";
+import { ArrowUpRight, Check, ExternalLink } from "lucide-react";
 import { toast } from "sonner";
 import { formatEther, parseAbi, parseEther, parseEventLogs, type Abi, type Address, type Chain } from "viem";
 import { useBalance, useConfig, useReadContract, useReadContracts, useWriteContract } from "wagmi";
@@ -28,7 +28,8 @@ type Step = {
   cta: string;
   image: string; // square artwork in /public
   showOwnedChog?: boolean; // swap the artwork for the wallet's own Chog once it has one
-  format: (balance: bigint) => string;
+  optional?: boolean; // not needed to play: shown under Extras and doesn't count toward "ready"
+  format?: (balance: bigint) => string;
 } & (
   | { href: string }
   | {
@@ -39,21 +40,35 @@ type Step = {
     }
 );
 
-// The faucet, in the order people need it (gas first). Edit copy, amounts and links here.
+// The faucet, in the order people need it (gas, then the Chog every duel requires). Edit copy, amounts and links here.
 // Minted items call the mock contracts' open mint(); their addresses come from .env.
 const STEPS: Step[] = [
   {
     title: "Testnet MON",
-    blurb: "Pays the gas for every transaction, and you can stake it on calls too. Comes from Monad's own faucet, which asks for your address. We copy it for you.",
+    blurb: "Pays gas, and you can stake it on calls. From Monad's faucet. We copy your address.",
     cta: "Get MON",
     image: "/monad-mark.svg",
     format: (b) => `${fmt(Number(formatEther(b)))} MON`,
     href: "https://faucet.monad.xyz",
   },
   {
-    title: "1,000 tCHOG",
-    blurb: "Test $CHOG to stake on calls in the Arena. Claim again when you run low, up to 10,000 a day.",
-    cta: "Get tCHOG",
+    title: "A Chog NFT",
+    blurb: "A test Chog Genesis with the real collection's art and traits. Up to 5 per wallet.",
+    cta: "Mint my Chog",
+    image: "/chog-1044.png",
+    showOwnedChog: true,
+    contract: nft,
+    abi: parseAbi(["function mint(address to) returns (uint256)", balanceOf, minted]),
+    args: (to) => [to],
+    limit: BigInt(5),
+    limitText: (m) => `${m} / 5 minted`,
+    reveal: true,
+  },
+  {
+    title: "tCHOG",
+    optional: true,
+    blurb: "Only if you want to stake in $CHOG. MON works for every call.",
+    cta: "Claim 1,000 tCHOG",
     image: "/chog-coin.avif",
     format: (b) => `${fmt(Number(formatEther(b)))} tCHOG`,
     contract: chog,
@@ -61,20 +76,6 @@ const STEPS: Step[] = [
     args: (to) => [to, parseEther("1000")],
     limit: parseEther("10000"),
     limitText: (m) => `${fmt(Number(formatEther(m)))} / 10,000 claimed today`,
-  },
-  {
-    title: "A Chog NFT",
-    blurb: "A test Chog Genesis with the real collection's art and traits. Up to 5 per wallet.",
-    cta: "Get NFT",
-    image: "/chog-1044.png",
-    showOwnedChog: true,
-    format: (b) => `${b} ${b === BigInt(1) ? "NFT" : "NFTs"}`,
-    contract: nft,
-    abi: parseAbi(["function mint(address to) returns (uint256)", balanceOf, minted]),
-    args: (to) => [to],
-    limit: BigInt(5),
-    limitText: (m) => `${m} / 5 minted`,
-    reveal: true,
   },
 ];
 
@@ -96,8 +97,10 @@ export function FaucetPanel() {
   const balances = reads.map((r) => r.balance);
   const ready = wallet.isTestnet && wallet.ready && !!address;
   const done = balances.map((b) => ready && b !== undefined && b > BigInt(0));
-  const count = done.filter(Boolean).length;
-  const next = ready ? done.indexOf(false) : -1;
+  const total = STEPS.filter((s) => !s.optional).length;
+  const count = done.filter((d, n) => d && !STEPS[n].optional).length;
+  const allDone = ready && count === total;
+  const next = ready ? done.findIndex((d, n) => !d && !STEPS[n].optional) : -1;
   const ownChog = useChogAvatar(ready ? address : undefined, chain.id).src;
 
   if (!wallet.isTestnet) {
@@ -115,32 +118,36 @@ export function FaucetPanel() {
   }
 
   return (
-    <div data-screen-label="Faucet" className="grid gap-8 lg:grid-cols-[300px_minmax(0,1fr)] lg:gap-14">
-      <div className="self-start lg:sticky lg:top-28">
-        <h1 className="m-0 text-[32px] leading-[1.1] font-semibold tracking-[-.03em]">Faucet</h1>
-        <p className="mt-2 text-[15px] leading-relaxed text-[#6B6185]">
-          {!ready
-            ? "Free test tokens to try ChogXBet on Monad Testnet. Get them in order, gas first. tCHOG is optional; you can stake MON instead."
-            : count === STEPS.length
-              ? "You have everything. Pick a call you disagree with and take the other side."
-              : `${count} of ${STEPS.length} ready. Get them in order, gas first.`}
-        </p>
-        {ready && count === STEPS.length && (
-          <Link href="/app" className="mt-5 inline-flex rounded-[10px] bg-[#6E56E8] px-4 py-3 text-[15px] font-semibold text-white hover:brightness-[.96]">
+    <div data-screen-label="Faucet">
+      <div className="flex flex-wrap items-end justify-between gap-6">
+        <div>
+          <span className={`inline-flex items-center gap-2 rounded-full py-1 pr-3 text-[14px] font-semibold ${allDone ? "bg-[#E3F5EC] pl-1 text-[#1F8A55]" : "bg-[#F1EEFB] pl-3 text-[#6E56E8]"}`}>
+            {allDone && (
+              <span className="grid size-6 place-items-center rounded-full bg-[#1F8A55] text-white">
+                <Check className="size-3.5" strokeWidth={3} aria-hidden />
+              </span>
+            )}
+            {count} of {total} ready
+          </span>
+          <h1 className="m-0 mt-4 text-[32px] leading-[1.1] font-semibold tracking-[-.03em] sm:text-[40px]">Get set up to duel</h1>
+          <p className="mt-3 text-[17px] leading-relaxed text-[#6B6185]">
+            {allDone
+              ? "You're ready to play. Pick a call you disagree with and take the other side."
+              : "Two things and you're in the Arena. Testnet only, no real value."}
+          </p>
+        </div>
+        {allDone && (
+          <Link href="/app" className="flex w-full justify-center rounded-[10px] bg-[#6E56E8] px-4 py-3 text-[15px] font-semibold text-white hover:brightness-[.96] sm:w-auto">
             Go to the Arena
           </Link>
         )}
-        <p className="mt-6 border-t border-[#ECE8F3] pt-4 text-[13px] leading-relaxed text-[#8E85A3]">
-          Testnet only. These tokens have no value and never reach mainnet.
-        </p>
       </div>
-      <ol className="m-0 list-none overflow-hidden rounded-2xl border border-[#ECE8F3] bg-white p-0">
+      <ol className="m-0 mt-8 grid list-none gap-6 p-0 lg:grid-cols-3">
         {STEPS.map((step, n) => (
-          <StepRow
+          <StepCard
             key={step.title}
             step={step}
             n={n + 1}
-            last={n === STEPS.length - 1}
             image={(step.showOwnedChog && ownChog) || step.image}
             balance={balances[n]}
             minted={reads[n].minted}
@@ -156,14 +163,16 @@ export function FaucetPanel() {
   );
 }
 
-function StepRow({ step, n, last, image, balance, minted, done, current, wallet, ready, chain }: {
-  step: Step; n: number; last: boolean; image: string; balance?: bigint; minted?: bigint; done: boolean; current: boolean; wallet: AppWallet; ready: boolean; chain: Chain;
+const label = "font-mono text-[12px] tracking-[.12em] text-[#8E85A3] uppercase";
+const mono = "font-mono text-[14px] text-[#6B6185]";
+
+function StepCard({ step, n, image, balance, minted, done, current, wallet, ready, chain }: {
+  step: Step; n: number; image: string; balance?: bigint; minted?: bigint; done: boolean; current: boolean; wallet: AppWallet; ready: boolean; chain: Chain;
 }) {
   const config = useConfig();
   const queryClient = useQueryClient();
   const { writeContractAsync, isPending } = useWriteContract();
   const [revealId, setRevealId] = useState<bigint>();
-  const [receivedTx, setReceivedTx] = useState<string>();
 
   const claim = async () => {
     if (!("contract" in step) || !step.contract || !wallet.address) return;
@@ -174,9 +183,17 @@ function StepRow({ step, n, last, image, balance, minted, done, current, wallet,
       const { logs, status } = await waitForTransactionReceipt(config, { hash, chainId: chain.id });
       if (status !== "success") throw new Error();
       const [mint] = step.reveal ? parseEventLogs({ abi: transferAbi, eventName: "Transfer", logs }) : [];
-      toast.dismiss(id);
-      if (mint) setRevealId(mint.args.tokenId);
-      else setReceivedTx(`${chain.blockExplorers?.default.url}/tx/${hash}`);
+      if (mint) {
+        toast.dismiss(id);
+        setRevealId(mint.args.tokenId);
+      } else {
+        // Token claims' cta names the amount ("Claim 1,000 tCHOG").
+        toast.success(`+${step.cta.replace(/^Claim /, "")}`, {
+          id,
+          description: "It's in your wallet.",
+          action: { label: "View tx", onClick: () => window.open(`${chain.blockExplorers?.default.url}/tx/${hash}`, "_blank", "noopener") },
+        });
+      }
       queryClient.invalidateQueries();
     } catch (e) {
       toast.error((e as { shortMessage?: string }).shortMessage ?? "Transaction failed", { id });
@@ -203,79 +220,89 @@ function StepRow({ step, n, last, image, balance, minted, done, current, wallet,
   else if (isPending) action = { label: "Confirm in wallet…", disabled: true };
   else action = { label: step.cta, onClick: claim };
 
-  const dot = done
-    ? "border-[#6E56E8] bg-[#6E56E8] text-white"
-    : current
-      ? "border-[#6E56E8] bg-white text-[#6E56E8] shadow-[0_0_0_4px_#F1EEFB]"
-      : "border-[#DCD5EC] bg-white text-[#8E85A3]";
+  const formatted = ready && balance !== undefined && step.format ? step.format(balance) : "—";
+  const limitText = ready && minted !== undefined && "limitText" in step ? step.limitText(minted) : undefined;
+  const button = (
+    <Button
+      variant="plain"
+      disabled={action.disabled}
+      onClick={action.onClick}
+      className={`h-auto w-full rounded-[10px] px-4 py-3 text-[15px] font-semibold ${current ? "bg-[#6E56E8] text-white" : "border border-[#DCD5EC] bg-white text-[#1A1130]"}`}
+    >
+      {action.label}
+      {action.external && <ExternalLink className="size-3.5" aria-hidden />}
+    </Button>
+  );
+  if (step.optional) {
+    return (
+      <li className="flex flex-col rounded-2xl bg-[#F4F1FA] p-6 sm:p-7">
+        <p className={`m-0 ${label}`}>Extras · Optional</p>
+        <div className="mt-5 flex items-center gap-4">
+          <img src={image} alt="" className="size-14 rounded-xl bg-[#ECE8F3] object-cover" />
+          <div>
+            <h2 className="m-0 text-[20px] font-semibold tracking-[-.01em]">{step.title}</h2>
+            <span className={mono}>{formatted}</span>
+          </div>
+        </div>
+        <p className="mt-4 text-[16px] leading-normal text-[#6B6185]">{step.blurb}</p>
+        <div className="mt-4 grid grid-cols-2 gap-2 text-[14px] text-[#6B6185]">
+          <span className="rounded-lg bg-white px-3 py-2">
+            Stake in MON<b className="block font-semibold text-[#1A1130]">Always</b>
+          </span>
+          <span className="rounded-lg bg-white px-3 py-2">
+            Stake in {step.title}<b className="block font-semibold text-[#1A1130]">{done ? "Ready" : "Needs claim"}</b>
+          </span>
+        </div>
+        <div className="mt-auto pt-6">
+          {limitText && <p className={`mt-0 mb-3 ${mono}`}>{limitText}</p>}
+          {button}
+        </div>
+      </li>
+    );
+  }
 
   return (
-    <li className="relative grid grid-cols-[28px_48px_minmax(0,1fr)] items-start gap-x-4 gap-y-4 border-[#ECE8F3] px-5 py-6 sm:px-6 md:grid-cols-[28px_48px_minmax(0,1fr)_auto] [&+&]:border-t">
-      {/* Line to the next step's dot; draws down once this step is done. */}
-      {!last && (
-        <span aria-hidden className="absolute top-[48px] left-[33px] h-full w-0.5 bg-[#ECE8F3] sm:left-[37px]">
-          <span
-            className={`block h-full w-full origin-top bg-[#6E56E8] transition-[scale] duration-700 ease-[cubic-bezier(.34,1.3,.64,1)] motion-reduce:transition-none ${done ? "scale-y-100" : "scale-y-0"}`}
-          />
-        </span>
-      )}
-      <span
-        className={`relative z-10 mt-2.5 grid size-7 place-items-center rounded-full border-2 text-[13px] font-semibold transition-[background-color,border-color,color,box-shadow] duration-300 ${dot}`}
-      >
-        {done ? <Check className="size-4" strokeWidth={3} aria-label="Done" /> : n}
-      </span>
-      <img src={image} alt="" className="size-12 rounded-xl bg-[#F1EEFB] object-cover" />
-      <div className="min-w-0">
-        <h2 className="m-0 text-[17px] font-semibold tracking-[-.01em]">{step.title}</h2>
-        <p className="mt-1 max-w-[52ch] text-[14px] leading-normal text-[#6B6185]">{step.blurb}</p>
+    <li
+      className={`flex flex-col rounded-2xl border bg-white p-6 transition-[border-color,box-shadow] duration-300 sm:p-7 ${current ? "border-[#6E56E8] shadow-[0_12px_32px_-16px_rgba(110,86,232,.45)]" : "border-[#ECE8F3]"}`}
+    >
+      <div className="flex items-start justify-between">
+        <img src={image} alt="" className="size-16 rounded-2xl bg-[#F1EEFB] object-cover" />
+        {done ? (
+          <span className="inline-flex items-center gap-1 rounded-full bg-[#E3F5EC] px-3 py-1 text-[14px] font-semibold text-[#1F8A55]">
+            <Check className="size-4" strokeWidth={3} aria-hidden />
+            Done
+          </span>
+        ) : (
+          current && <span className="rounded-full bg-[#F1EEFB] px-3 py-1 text-[14px] font-semibold text-[#6E56E8]">Next</span>
+        )}
       </div>
-      <div className="col-start-3 flex flex-wrap items-center gap-x-4 gap-y-2 md:col-start-auto md:flex-col md:items-end md:self-center">
-        <span className="flex flex-col md:items-end">
-          <span className="font-mono text-[13px] text-[#6B6185]">{ready && balance !== undefined ? step.format(balance) : "—"}</span>
-          {ready && minted !== undefined && "limitText" in step && <span className="text-[12px] text-[#8E85A3]">{step.limitText(minted)}</span>}
-        </span>
-        <Button
-          variant="plain"
-          disabled={action.disabled}
-          onClick={action.onClick}
-          className={`h-auto min-w-[136px] rounded-[10px] px-4 py-2.5 text-[14px] font-semibold ${current ? "bg-[#6E56E8] text-white" : "border border-[#DCD5EC] bg-white text-[#1A1130]"}`}
-        >
-          {action.label}
-          {action.external && <ExternalLink className="size-3.5" aria-hidden />}
-        </Button>
+      <p className={`mt-6 mb-0 ${label}`}>Step {n}</p>
+      <h2 className="m-0 mt-1 text-[22px] font-semibold tracking-[-.01em]">{step.title}</h2>
+      <p className="mt-2 text-[16px] leading-normal text-[#6B6185]">{step.blurb}</p>
+      <div className="mt-auto pt-6">
+        {"href" in step && done ? (
+          <div className="flex items-center justify-between border-t border-[#ECE8F3] pt-5">
+            <span className={mono}>{formatted}</span>
+            <button type="button" onClick={getMon} className="inline-flex items-center gap-1 text-[15px] font-semibold text-[#6E56E8] hover:underline">
+              Top up
+              <ArrowUpRight className="size-4" aria-hidden />
+            </button>
+          </div>
+        ) : (
+          <>
+            <p className={`mt-0 mb-3 ${mono}`}>{limitText ?? formatted}</p>
+            {button}
+          </>
+        )}
       </div>
       {revealId !== undefined && <Reveal key={String(revealId)} id={revealId} onClose={() => setRevealId(undefined)} />}
-      {receivedTx && <Received title={step.title} image={step.image} txUrl={receivedTx} onClose={() => setReceivedTx(undefined)} />}
     </li>
   );
 }
 
-/** Celebrates a token claim: the coin pops in with the amount. */
-function Received({ title, image, txUrl, onClose }: { title: string; image: string; txUrl: string; onClose: () => void }) {
-  return (
-    <Dialog open onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="gap-0 rounded-2xl bg-white p-6 text-center sm:max-w-[340px]">
-        <img src={image} alt="" className="mx-auto size-24 rounded-full shadow-[0_0_0_10px_#F1EEFB] animate-in zoom-in-50 spin-in-12 duration-700 ease-out fill-mode-both motion-reduce:animate-none" />
-        <DialogTitle className="mt-6 text-[24px] font-semibold tracking-[-.02em] text-[#1A1130]">+{title}</DialogTitle>
-        <DialogDescription className="mt-1.5 text-[14px] text-[#6B6185]">Congrats, it&apos;s in your wallet. Stake it on a call you believe in.</DialogDescription>
-        <div className="mt-5 grid grid-cols-2 gap-2">
-          <a href={txUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center justify-center gap-1.5 rounded-[10px] border border-[#DCD5EC] bg-white p-3 text-[15px] font-semibold text-[#1A1130] hover:bg-[#F7F5FB]">
-            View tx
-            <ExternalLink className="size-3.5" aria-hidden />
-          </a>
-          <Link href="/app/create" className="rounded-[10px] bg-[#6E56E8] p-3 text-[15px] font-semibold text-white hover:brightness-[.96]">
-            Make a call
-          </Link>
-        </div>
-      </DialogContent>
-    </Dialog>
-  );
-}
-
-/** A freshly minted Chog arrives sealed; the owner taps to reveal its art and traits. */
+/** A freshly minted Chog arrives sealed, then reveals its art and traits on its own once the art loads. */
 function Reveal({ id, onClose }: { id: bigint; onClose: () => void }) {
   const [revealed, setRevealed] = useState(false);
-  const [loaded, setLoaded] = useState(false);
   const uri = useReadContract({ address: nft, abi: nftAbi, functionName: "tokenURI", args: [id], chainId: chain.id });
   const meta = useQuery({
     queryKey: ["chog-meta", uri.data],
@@ -293,19 +320,20 @@ function Reveal({ id, onClose }: { id: bigint; onClose: () => void }) {
           {revealed ? (meta.data?.name ?? `Chog #${id}`) : `Chog #${id} is yours`}
         </DialogTitle>
         <DialogDescription className="mt-1 text-[14px] text-[#6B6185]">
-          {revealed ? "Your ticket into the Arena." : "Fresh from the faucet. Who did you get?"}
+          {revealed ? "Your ticket into the Arena." : failed ? "Couldn't load the art. See it on your profile." : "Summoning your Chog…"}
         </DialogDescription>
         <div className="relative mt-4 aspect-square overflow-hidden rounded-xl bg-[#1A1130]">
           {meta.data && (
             <img
               src={ipfs(meta.data.image)}
               alt={revealed ? meta.data.name : ""}
-              onLoad={() => setLoaded(true)}
-              className={`size-full object-cover transition-[filter,scale] duration-[1400ms] ease-out motion-reduce:transition-none ${revealed ? "scale-100" : "scale-110 blur-2xl brightness-0"}`}
+              // Hold the sealed "?" a beat so the reveal reads as one, even when the art is cached.
+              onLoad={() => setTimeout(() => setRevealed(true), 300)}
+              className={`size-full object-cover transition-[filter,scale] duration-700 ease-out motion-reduce:transition-none ${revealed ? "scale-100" : "scale-110 blur-2xl brightness-0"}`}
             />
           )}
           {!revealed && (
-            <span aria-hidden className={`absolute inset-0 grid place-items-center text-[88px] font-semibold text-[#A391FF] ${loaded || failed ? "" : "animate-pulse"}`}>?</span>
+            <span aria-hidden className={`absolute inset-0 grid place-items-center text-[88px] font-semibold text-[#A391FF] ${failed ? "" : "animate-pulse"}`}>?</span>
           )}
         </div>
         {revealed && traits.length > 0 && (
@@ -318,8 +346,8 @@ function Reveal({ id, onClose }: { id: bigint; onClose: () => void }) {
             ))}
           </ul>
         )}
-        {revealed ? (
-          <div className="mt-4 grid grid-cols-2 gap-2">
+        {(revealed || failed) && (
+          <div className="mt-4 grid grid-cols-2 gap-2 animate-in fade-in-0 delay-700 duration-500 fill-mode-both">
             <Link href="/app/profile" className="rounded-[10px] border border-[#DCD5EC] bg-white p-3 text-center text-[15px] font-semibold text-[#1A1130] hover:bg-[#F7F5FB]">
               View profile
             </Link>
@@ -327,15 +355,6 @@ function Reveal({ id, onClose }: { id: bigint; onClose: () => void }) {
               Make a call
             </Link>
           </div>
-        ) : (
-          <Button
-            variant="plain"
-            disabled={!loaded && !failed}
-            onClick={() => (failed ? onClose() : setRevealed(true))}
-            className="mt-4 h-auto w-full rounded-[10px] bg-[#6E56E8] p-3 text-[15px] font-semibold text-white disabled:bg-[#C9BFE3] disabled:opacity-100"
-          >
-            {failed ? "Couldn't load the art. See it on your profile" : loaded ? "Reveal" : "Summoning your Chog…"}
-          </Button>
         )}
       </DialogContent>
     </Dialog>

@@ -8,6 +8,12 @@ export const pot = (stake: number) => stake * 2;
 export const burned = (stake: number) => pot(stake) * BURN;
 export const payout = (stake: number) => pot(stake) - burned(stake);
 export const parseStake = (s: string) => parseFloat(s.replace(/,/g, "")) || 0;
+/** Keeps a typed amount to digits and one point, grouped with commas: "$85000.5x" → "85,000.5". */
+export const cleanAmount = (s: string, decimals: number) => {
+  const [int, ...dec] = s.replace(/[^\d.]/g, "").split(".");
+  const grouped = int.replace(/^0+(?=\d)/, "").replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+  return dec.length ? `${grouped || "0"}.${dec.join("").slice(0, decimals)}` : grouped;
+};
 /** Typed amount → base units for the contract; 0 when it isn't a plain decimal. */
 export const toUnits = (s: string, decimals: number) => {
   try {
@@ -29,7 +35,7 @@ export const duelAbi = parseAbi([
 ]);
 export const SETTLE_WINDOW = 24 * 60 * 60;
 
-const feedAbi = parseAbi([
+export const feedAbi = parseAbi([
   "function latestRoundData() view returns (uint80, int256, uint256, uint256, uint80)",
   "function getRoundData(uint80) view returns (uint80, int256, uint256, uint256, uint80)",
 ]);
@@ -51,11 +57,15 @@ export async function findRound(client: Pick<PublicClient, "readContract">, feed
   return phase + lo;
 }
 
-// Each deadline is 23:59 UTC on that day.
-const endOfDay = (days: number, now = new Date()) => Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + days + 1) / 1000 - 60;
-export const DEADLINES: Record<string, (now?: Date) => number> = {
-  Tomorrow: (now) => endOfDay(1, now),
-  Friday: (now = new Date()) => endOfDay((5 - now.getUTCDay() + 7) % 7 || 7, now),
-  "Month end": (now = new Date()) => Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1) / 1000 - 60,
-  "Dec 31": (now = new Date()) => Date.UTC(now.getUTCFullYear() + 1, 0, 1) / 1000 - 60,
+// Two quick deadlines and two long ones (23:59 UTC on that day); "Custom" in the form covers anything else.
+// `phrase` finishes the claim: "BTC will be above $90,000 by Dec 31."
+const inMinutes = (m: number) => () => Math.floor(Date.now() / 1000) + m * 60;
+const utc = (y: number, m: number, d: number) => Date.UTC(y, m, d) / 1000 - 60;
+export const DEADLINES: Record<string, { phrase: string; at: () => number }> = {
+  "30 min": { phrase: "in 30 min", at: inMinutes(30) },
+  "1 hour": { phrase: "in 1 hour", at: inMinutes(60) },
+  "Month end": { phrase: "by month end", at: (now = new Date()) => utc(now.getUTCFullYear(), now.getUTCMonth() + 1, 1) },
+  "Dec 31": { phrase: "by Dec 31", at: (now = new Date()) => utc(now.getUTCFullYear() + 1, 0, 1) },
 };
+/** Mirrors ChogDuel.MIN_LEAD: the contract rejects deadlines sooner than this. */
+export const MIN_LEAD = 2 * 60;

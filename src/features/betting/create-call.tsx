@@ -3,15 +3,16 @@
 import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { erc20Abi, parseEventLogs, zeroAddress, type Hex } from "viem";
+import { erc20Abi, formatUnits, parseEventLogs, zeroAddress, type Hex } from "viem";
 import { useConfig, useReadContract, useWriteContract } from "wagmi";
 import { waitForTransactionReceipt } from "wagmi/actions";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { burned, DEADLINES, duelAbi, fmt, parseStake, payout, pot, TARGET_DECIMALS, toUnits } from "./duel";
+import { burned, cleanAmount, DEADLINES, duelAbi, feedAbi, MIN_LEAD, fmt, parseStake, payout, pot, TARGET_DECIMALS, toUnits } from "./duel";
 import Link from "next/link";
+import { NETWORKS } from "./networks";
 import { StepAction, useOnboarding } from "./onboarding";
 import { useWallet } from "./wallet";
 
@@ -47,7 +48,8 @@ export function CreateCall() {
   const asset = assets.includes(picked) ? picked : assets[0];
   const [dir, setDir] = useState<"above" | "below">("above");
   const [target, setTarget] = useState("");
-  const [deadline, setDeadline] = useState("Dec 31");
+  const [deadline, setDeadline] = useState("Month end");
+  const [custom, setCustom] = useState(""); // datetime-local value, used when deadline is "Custom"
   const [token, setToken] = useState<Token>("MON");
   const [stakeText, setStakeText] = useState("1");
   // The created duel's share link; set once its create transaction confirms.
@@ -67,14 +69,24 @@ export function CreateCall() {
     address: chog, abi: erc20Abi, functionName: "allowance", args: [w.address!, duel!], chainId: chain.id,
     query: { enabled: token === "CHOG" && !!chog && !!duel && !!w.address },
   });
+  // The live price from mainnet Chainlink on both networks: testnet duels settle on FeedMirror copies of it, which hold only settled rounds.
+  const latest = useReadContract({
+    address: NETWORKS.mainnet.feeds[asset], abi: feedAbi, functionName: "latestRoundData", chainId: NETWORKS.mainnet.chain.id,
+    query: { refetchInterval: 15_000 },
+  });
+  const price = latest.data && Number(formatUnits(latest.data[1], TARGET_DECIMALS));
   const needsApproval = token === "CHOG" && (allowance.data ?? BigInt(0)) < stakeUnits;
   const short = balance != null && stake > balance;
-  const problem = !duel ? "Duels aren't live on this network yet" : !(targetUnits > BigInt(0)) ? "Enter a target price" : !(stakeUnits > BigInt(0)) ? "Enter a stake" : short ? `Not enough ${t.label}` : null;
+  // Called only at lock time: presets count from the click, and reading the clock during render breaks prerendering.
+  const deadlineAt = () => deadline === "Custom" ? Math.floor(new Date(custom).getTime() / 1000) : DEADLINES[deadline].at();
+  const when = deadline !== "Custom" ? DEADLINES[deadline].phrase : !custom ? "…" : "by " + new Date(custom).toLocaleString("en-US", { timeZone: "UTC", month: "short", day: "numeric", year: "numeric", hour: "2-digit", minute: "2-digit", hourCycle: "h23" }) + " UTC";
+  const problem = !duel ? "Duels aren't live on this network yet" : deadline === "Custom" && !custom ? "Pick a deadline" : !(targetUnits > BigInt(0)) ? "Enter a target price" : !(stakeUnits > BigInt(0)) ? "Enter a stake" : short ? `Not enough ${t.label}` : null;
   const lockLabel = busy ?? (link ? "Locked ✓" : problem ?? `${needsApproval ? "Approve & lock" : "Lock"} ${fmt(stake)} ${t.label} & get link`);
-  const claim = `${asset} will be ${dir} $${target || "…"} by ${deadline}.`;
+  const claim = `${asset} will be ${dir} $${target || "…"} ${when}.`;
 
   const lock = async () => {
     if (!duel || (token === "CHOG" && !chog)) return;
+    if (!(deadlineAt() >= Date.now() / 1000 + MIN_LEAD)) return void toast.error(`Deadline must be at least ${MIN_LEAD / 60} min out`);
     // One click may need two transactions for $CHOG: approve the escrow, then create.
     const send = async (label: string, write: () => Promise<Hex>) => {
       setBusy("Confirm in wallet…");
@@ -93,7 +105,7 @@ export function CreateCall() {
           address: duel,
           abi: duelAbi,
           functionName: "create",
-          args: [token === "MON" ? zeroAddress : chog!, stakeUnits, w.net.feeds[asset]!, dir === "above", targetUnits, BigInt(DEADLINES[deadline]())],
+          args: [token === "MON" ? zeroAddress : chog!, stakeUnits, w.net.feeds[asset]!, dir === "above", targetUnits, BigInt(deadlineAt())],
           value: token === "MON" ? stakeUnits : undefined,
           chainId: chain.id,
         }),
@@ -148,13 +160,16 @@ export function CreateCall() {
             </div>
             <div className="flex flex-col gap-1.5 text-[13px] text-[#6B6185]">
               Deadline
-              <div className="grid h-12 grid-cols-4 gap-1 rounded-[10px] bg-[#F4F1FA] p-1">
-                {Object.keys(DEADLINES).map((d) => (
+              <div className="grid h-12 grid-cols-5 gap-1 rounded-[10px] bg-[#F4F1FA] p-1">
+                {[...Object.keys(DEADLINES), "Custom"].map((d) => (
                   <Button key={d} variant="plain" onClick={() => edit(setDeadline)(d)} style={seg(deadline === d)} className="h-full rounded-[7px] px-1 py-0 text-[13px] font-medium whitespace-nowrap">
                     {d}
                   </Button>
                 ))}
               </div>
+              {deadline === "Custom" && (
+                <Input type="datetime-local" value={custom} onChange={(e) => edit(setCustom)(e.target.value)} className="h-auto rounded-[10px] border-[#DCD5EC] p-3 font-mono text-[15px] text-[#1A1130]" />
+              )}
             </div>
           </div>
           <div className="flex flex-col gap-1.5 text-[13px] text-[#6B6185]">
@@ -165,8 +180,11 @@ export function CreateCall() {
             </div>
           </div>
           <label className="flex flex-col gap-1.5 text-[13px] text-[#6B6185]">
-            Target price (USD)
-            <Input value={target} placeholder={ASSETS[asset].eg} inputMode="decimal" onChange={(e) => edit(setTarget)(e.target.value)} className="h-auto rounded-[10px] border-[#DCD5EC] p-3 font-mono text-[17px] font-medium text-[#1A1130]" />
+            <span className="flex justify-between">Target price (USD){price != null && <span className="font-mono text-[#1A1130]">{asset} now ${fmt(price)}</span>}</span>
+            <div className="flex items-center rounded-[10px] border border-[#DCD5EC] px-3 focus-within:border-[#C9BFE3]">
+              <span className="font-mono text-[17px] font-medium text-[#8E85A3]">$</span>
+              <Input value={target} placeholder={price != null ? fmt(price) : ASSETS[asset].eg} inputMode="decimal" onChange={(e) => edit(setTarget)(cleanAmount(e.target.value, TARGET_DECIMALS))} className="h-auto flex-1 border-0 bg-transparent py-3 pr-0 pl-1 font-mono text-[17px] font-medium text-[#1A1130] shadow-none focus-visible:ring-0" />
+            </div>
           </label>
           <div className="flex flex-col gap-1.5 text-[13px] text-[#6B6185]">
             Stake in
@@ -185,7 +203,7 @@ export function CreateCall() {
               <span>Balance {w.ready && balance != null ? `${fmt(balance)} ${t.label}` : "—"}</span>
             </div>
             <div className={`flex items-center rounded-[10px] border px-3 ${short ? "border-[#E8A3AF]" : "border-[#DCD5EC]"}`}>
-              <Input value={stakeText} placeholder="0" inputMode="decimal" onChange={(e) => edit(setStakeText)(e.target.value)} className="h-auto flex-1 border-0 bg-transparent px-0 py-3 font-mono text-[17px] font-medium text-[#1A1130] shadow-none focus-visible:ring-0" />
+              <Input value={stakeText} placeholder="0" inputMode="decimal" onChange={(e) => edit(setStakeText)(cleanAmount(e.target.value, 18))} className="h-auto flex-1 border-0 bg-transparent px-0 py-3 font-mono text-[17px] font-medium text-[#1A1130] shadow-none focus-visible:ring-0" />
               <span className="font-mono text-[13px] font-medium text-[#8E85A3]">{t.label}</span>
             </div>
             {short && (
@@ -209,7 +227,7 @@ export function CreateCall() {
           <div className="flex flex-col gap-2.5 rounded-xl bg-[#FAF9FC] p-4 text-[14px]">
             <div className="flex justify-between"><span className="text-[#6B6185]">Pot if accepted</span><span className="font-mono">{fmt(pot(stake))} {t.label}</span></div>
             <div className="flex justify-between"><span className="text-[#6B6185]">{t.fee}</span><span className="font-mono text-[#C43A52]">−{fmt(burned(stake))} {t.label}</span></div>
-            <div className="flex justify-between"><span className="text-[#6B6185]">Settles at</span><span className="font-mono">{new Date(DEADLINES[deadline]() * 1000).toLocaleString("en-US", { timeZone: "UTC", month: "short", day: "numeric", year: "numeric", hour: "2-digit", minute: "2-digit", hourCycle: "h23" })} UTC</span></div>
+            <div className="flex justify-between"><span className="text-[#6B6185]">Settles</span><span className="font-mono">{when}</span></div>
             <div className="flex justify-between border-t border-[#ECE8F3] pt-2.5 font-semibold"><span>You receive if right</span><span className="font-mono text-[#6E56E8]">{fmt(payout(stake))} {t.label}</span></div>
           </div>
           <Button variant="plain" disabled={!!problem || !!busy || !!link} onClick={lock} className="h-auto rounded-[11px] bg-[#6E56E8] p-[15px] text-[16px] font-semibold text-white disabled:bg-[#C9BFE3] disabled:opacity-100">
