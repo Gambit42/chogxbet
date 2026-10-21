@@ -63,7 +63,7 @@ contract ChogDuelTest {
     /// Alice calls "above $5" with a 1 MON stake; bob takes the other side.
     function monDuel() internal returns (uint256 id) {
         vm.prank(alice);
-        id = duel.create{value: 1 ether}(address(0), 1 ether, address(feed), true, 5e8, deadline);
+        id = duel.create{value: 1 ether}(address(0), 1 ether, address(feed), true, 5e8, deadline, 0);
         vm.prank(bob);
         duel.accept{value: 1 ether}(id);
     }
@@ -78,7 +78,7 @@ contract ChogDuelTest {
 
     function test_monCreateAndCancel() public {
         vm.prank(alice);
-        uint256 id = duel.create{value: 1 ether}(address(0), 1 ether, address(feed), true, 5e8, deadline);
+        uint256 id = duel.create{value: 1 ether}(address(0), 1 ether, address(feed), true, 5e8, deadline, 0);
         require(address(duel).balance == 1 ether && alice.balance == 9 ether, "stake not escrowed");
 
         vm.expectRevert("not yours");
@@ -96,7 +96,7 @@ contract ChogDuelTest {
     function test_chogCreateAndCancel() public {
         vm.startPrank(alice);
         chog.approve(address(duel), 10 ether);
-        uint256 id = duel.create(address(chog), 10 ether, address(feed), false, 5e8, deadline);
+        uint256 id = duel.create(address(chog), 10 ether, address(feed), false, 5e8, deadline, 0);
         require(chog.balanceOf(address(duel)) == 10 ether, "stake not escrowed");
         duel.cancel(id);
         vm.stopPrank();
@@ -106,23 +106,23 @@ contract ChogDuelTest {
     function test_rejects() public {
         vm.deal(address(this), 1 ether);
         vm.expectRevert("need a Chog");
-        duel.create{value: 1 ether}(address(0), 1 ether, address(feed), true, 5e8, deadline);
+        duel.create{value: 1 ether}(address(0), 1 ether, address(feed), true, 5e8, deadline, 0);
 
         vm.startPrank(alice);
         vm.expectRevert("wrong MON amount");
-        duel.create{value: 0.5 ether}(address(0), 1 ether, address(feed), true, 5e8, deadline);
+        duel.create{value: 0.5 ether}(address(0), 1 ether, address(feed), true, 5e8, deadline, 0);
         vm.expectRevert("deadline too soon");
-        duel.create{value: 1 ether}(address(0), 1 ether, address(feed), true, 5e8, uint64(block.timestamp + 1 minutes));
+        duel.create{value: 1 ether}(address(0), 1 ether, address(feed), true, 5e8, uint64(block.timestamp + 1 minutes), 0);
         vm.expectRevert("unsupported token");
-        duel.create(address(nft), 1 ether, address(feed), true, 5e8, deadline);
+        duel.create(address(nft), 1 ether, address(feed), true, 5e8, deadline, 0);
         vm.expectRevert("unsupported feed");
-        duel.create{value: 1 ether}(address(0), 1 ether, address(0xBAD), true, 5e8, deadline);
+        duel.create{value: 1 ether}(address(0), 1 ether, address(0xBAD), true, 5e8, deadline, 0);
         vm.stopPrank();
     }
 
     function test_accept() public {
         vm.prank(alice);
-        uint256 id = duel.create{value: 1 ether}(address(0), 1 ether, address(feed), true, 5e8, deadline);
+        uint256 id = duel.create{value: 1 ether}(address(0), 1 ether, address(feed), true, 5e8, deadline, 0);
 
         vm.prank(alice);
         vm.expectRevert("own duel");
@@ -150,9 +150,38 @@ contract ChogDuelTest {
         duel.cancel(id);
     }
 
+    /// Alice challenges Chog #2 (bob's): carol can't take it, bob can, and the challenge follows the Chog if bob sells it.
+    function test_challenge() public {
+        address carol = address(0xCA201);
+        nft.mint(carol); // #3
+        vm.deal(carol, 2 ether);
+        vm.startPrank(alice);
+        vm.expectRevert("own Chog");
+        duel.create{value: 1 ether}(address(0), 1 ether, address(feed), true, 5e8, deadline, 1);
+        vm.expectRevert(abi.encodeWithSignature("ERC721NonexistentToken(uint256)", 99));
+        duel.create{value: 1 ether}(address(0), 1 ether, address(feed), true, 5e8, deadline, 99);
+        uint256 id = duel.create{value: 1 ether}(address(0), 1 ether, address(feed), true, 5e8, deadline, 2);
+        uint256 id2 = duel.create{value: 1 ether}(address(0), 1 ether, address(feed), true, 5e8, deadline, 2);
+        vm.stopPrank();
+
+        vm.prank(carol);
+        vm.expectRevert("not the challenged Chog");
+        duel.accept{value: 1 ether}(id);
+        vm.prank(bob);
+        duel.accept{value: 1 ether}(id);
+
+        vm.prank(bob);
+        nft.transferFrom(bob, carol, 2);
+        vm.prank(bob);
+        vm.expectRevert("need a Chog");
+        duel.accept{value: 1 ether}(id2);
+        vm.prank(carol);
+        duel.accept{value: 1 ether}(id2);
+    }
+
     function test_acceptCutoff() public {
         vm.prank(alice);
-        uint256 id = duel.create{value: 1 ether}(address(0), 1 ether, address(feed), true, 5e8, deadline);
+        uint256 id = duel.create{value: 1 ether}(address(0), 1 ether, address(feed), true, 5e8, deadline, 0);
         vm.warp(deadline - 20 seconds);
         vm.prank(bob);
         vm.expectRevert("too late to accept");
@@ -175,6 +204,7 @@ contract ChogDuelTest {
         require(duel.owed(address(0), alice) == 1.9 ether, "wrong payout");
         require(duel.owed(address(0), treasury) == 0.1 ether, "wrong fee");
         require(duel.owed(address(0), bob) == 0, "loser paid");
+        require(duel.settledBlock(id) == block.number, "settle block not recorded");
         vm.expectRevert("not accepted");
         duel.settle(id, 2);
 
@@ -189,7 +219,7 @@ contract ChogDuelTest {
     function test_settleChogOpponentWinsAndBurns() public {
         vm.startPrank(alice);
         chog.approve(address(duel), 10 ether);
-        uint256 id = duel.create(address(chog), 10 ether, address(feed), true, 5e8, deadline);
+        uint256 id = duel.create(address(chog), 10 ether, address(feed), true, 5e8, deadline, 0);
         vm.stopPrank();
         vm.startPrank(bob);
         chog.approve(address(duel), 10 ether);

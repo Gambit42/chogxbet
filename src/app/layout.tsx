@@ -10,8 +10,7 @@ const geistMono = Geist_Mono({ subsets: ["latin"], variable: "--font-geist-mono"
 export const metadata: Metadata = {
   title: "ChogXBet",
   icons: { icon: "/chog-logo.png" },
-  // Pages override with their own /og?title=…&sub=…&stake=…&settles=… URL.
-  openGraph: { images: "/og" },
+  // The share image is the static app/opengraph-image.png; duel pages can override with their own /og?asset=…&call=…&when=… URL.
   twitter: { card: "summary_large_image" },
 };
 

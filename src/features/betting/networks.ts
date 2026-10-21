@@ -12,6 +12,7 @@ export const NETWORKS = {
     nft: "0xc96d31f8626c6d03fae5dcd3d61e3fb9f4a73763" as Address | undefined,
     // ChogDuel escrow (contracts/src); not on mainnet until it has settlement and a review.
     duel: undefined as Address | undefined,
+    duelFromBlock: BigInt(0),
     // Chainlink USD price feeds (8 decimals) the escrow allowlists; checked on-chain 2026-10-21.
     feeds: {
       MON: "0xBcD78f76005B7515837af6b50c7C52BCf73822fb",
@@ -27,12 +28,14 @@ export const NETWORKS = {
     chog: process.env.NEXT_PUBLIC_CHOG_ADDRESS as Address | undefined,
     nft: process.env.NEXT_PUBLIC_CHOG_NFT_ADDRESS as Address | undefined,
     duel: process.env.NEXT_PUBLIC_DUEL_ADDRESS as Address | undefined,
+    // Deployment block of 0xdc3D...8dE6 (2026-10-21).
+    duelFromBlock: BigInt(72970103),
     // FeedMirrors (contracts/src/testnet) the settle cron fills with mainnet Chainlink rounds; deployed by DeployDuel.s.sol 2026-10-21.
     feeds: {
-      MON: "0xaD3CE91127Efa66165e75BaCfdb59F7c6c832eb4",
-      BTC: "0x7E51eF77F3631f562FBa2b81C4B75F68DB9A1693",
-      SOL: "0xDb42EA9922529f9E3552Be153e1AB1A1Ba980DDC",
-      ETH: "0xBF74B354Fd760A3dbE8C3516E0Efd65B5858ebC7",
+      MON: "0x597152837F69f4186F36f9ed21446D9E56AaC509",
+      BTC: "0xaB07228F732742B55faACC91737caFD2308E9Bc0",
+      SOL: "0x5aD5803fED64aAE5110E3d5F32FeC9Ed0913f492",
+      ETH: "0xf36469dc7C31FD14F1DA65978d8b5F680149D882",
     } as Partial<Record<string, Address>>,
     getChog: "/app/faucet",
     getNft: "/app/faucet",

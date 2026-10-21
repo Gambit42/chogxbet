@@ -1,20 +1,13 @@
 "use client";
 import { useQueries } from "@tanstack/react-query";
-import { parseAbi, type Address } from "viem";
+import { useSyncExternalStore } from "react";
+import type { Address } from "viem";
 import { useReadContracts } from "wagmi";
 import { networkOf } from "@/features/betting/networks";
+import { ipfs, nftAbi, type Meta } from "./nft";
 
-export const nftAbi = parseAbi([
-  "function balanceOf(address) view returns (uint256)",
-  "function nextId() view returns (uint256)",
-  "function totalSupply() view returns (uint256)",
-  "function ownerOf(uint256) view returns (address)",
-  "function tokenURI(uint256) view returns (string)",
-]);
+export { ipfs, nftAbi, type Meta };
 
-export const ipfs = (uri: string) => uri.replace("ipfs://", "https://ipfs.filebase.io/ipfs/");
-
-export type Meta = { name: string; image: string; attributes?: { trait_type: string; value: string }[] };
 /** `pending` stays true until the metadata loads or fails, so callers can hold a placeholder. */
 export type Owned = { id: bigint; meta?: Meta; pending: boolean };
 
@@ -43,10 +36,11 @@ export function useOwnedChogs(owner: Address | undefined, chainId: number) {
     query: { enabled: mine.length > 0 },
   });
   const metas = useQueries({
-    queries: mine.map((_, i) => {
+    queries: mine.map((id, i) => {
       const uri = uris.data?.[i]?.result as string | undefined;
       return {
-        queryKey: ["chog-meta", uri],
+        // The id keeps keys unique while the URIs are still loading (all undefined).
+        queryKey: ["chog-meta", String(id), uri],
         queryFn: async (): Promise<Meta> => (await fetch(ipfs(uri!))).json(),
         enabled: !!uri,
         staleTime: Infinity,
@@ -58,9 +52,38 @@ export function useOwnedChogs(owner: Address | undefined, chainId: number) {
   return { loading, chogs };
 }
 
-/** The wallet's first Chog's art: `loading` while that's unknown, no `src` if it owns none. */
-export function useChogAvatar(owner: Address | undefined, chainId: number) {
+// ponytail: the profile pick lives in this browser only; move it server-side if it must follow the wallet across devices.
+const pickKey = (owner: Address, chainId: number) => `chog-default:${chainId}:${owner.toLowerCase()}`;
+const pickListeners = new Set<() => void>();
+
+export function setDefaultChog(owner: Address, chainId: number, id: bigint) {
+  try { localStorage.setItem(pickKey(owner, chainId), String(id)); } catch {}
+  pickListeners.forEach((l) => l());
+}
+
+/** The Chog picked on the profile page, or the first one owned if none was picked (or it was sold). */
+export function useDefaultChog(owner: Address | undefined, chainId: number, chogs: Owned[]) {
+  const picked = useSyncExternalStore(
+    (cb) => {
+      pickListeners.add(cb);
+      window.addEventListener("storage", cb);
+      return () => { pickListeners.delete(cb); window.removeEventListener("storage", cb); };
+    },
+    () => { try { return owner ? localStorage.getItem(pickKey(owner, chainId)) : null; } catch { return null; } },
+    () => null,
+  );
+  return chogs.find((c) => String(c.id) === picked) ?? chogs[0];
+}
+
+/** The Chog that stands for `owner`: `prefer` (a duel link's ?chog) if they still hold it, else their profile pick. */
+export function useProfileChog(owner: Address | undefined, chainId: number, prefer?: string) {
   const { loading, chogs } = useOwnedChogs(owner, chainId);
-  const first = chogs[0];
-  return { loading: loading || !!first?.pending, src: first?.meta && ipfs(first.meta.image) };
+  const pick = useDefaultChog(owner, chainId, chogs);
+  return { loading, chogs, chog: chogs.find((c) => String(c.id) === prefer) ?? pick };
+}
+
+/** The wallet's profile Chog art: `loading` while that's unknown, no `src` if it owns none. */
+export function useChogAvatar(owner: Address | undefined, chainId: number) {
+  const { loading, chog } = useProfileChog(owner, chainId);
+  return { loading: loading || !!chog?.pending, src: chog?.meta && ipfs(chog.meta.image) };
 }

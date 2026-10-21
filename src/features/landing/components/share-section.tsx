@@ -1,6 +1,6 @@
 import { Container } from "@/components/ui/container";
 
-const POINTS = ["Your win/loss record is on every card", "Open to anyone, or lock it to one wallet", "Unaccepted calls refund at the deadline"];
+const POINTS = ["Your Chog is on every card", "Open to anyone, or lock it to one wallet", "Unaccepted calls refund at the deadline"];
 
 /* eslint-disable @next/next/no-img-element -- Preserve the supplied artwork at its original dimensions. */
 export default function ShareSection() {
@@ -17,17 +17,8 @@ export default function ShareSection() {
           </div>
           <div className="mt-3 text-[16px] leading-[1.45]">BTC above $100k by Dec 31. 25k $CHOG on it. Anyone want to tell me I&apos;m wrong?</div>
           <div className="mt-3.5 overflow-hidden rounded-[14px] border border-[#ECE8F3] bg-white">
-            <div className="bg-[#1A1130] p-[22px] text-white">
-              <div className="flex justify-between font-mono text-[12px] font-medium text-[#B9A8FF]">
-                <span>CHOGXBET · DUEL</span>
-                <span>25,000 $CHOG</span>
-              </div>
-              <div className="mt-3.5 text-[26px] leading-[1.15] font-semibold tracking-[-.02em]">Chog #1044 says BTC &gt; $100,000 by Dec 31.</div>
-              <div className="mt-5 flex items-center justify-between">
-                <span className="text-[14px] text-[#C9C0E6]">Seat open for a challenger</span>
-                <span className="rounded-full bg-[#A391FF] px-3 py-[7px] text-[13px] font-semibold text-[#140A2A]">Take the bet →</span>
-              </div>
-            </div>
+            {/* A saved render of /og?asset=BTC&call=above $100,000&when=by Dec 31&stake=25K $CHOG&win=47.5K&chog=11 */}
+            <img alt="BTC will be above $100,000 by Dec 31, 25K $CHOG duel" src="/card-btc.webp" width={1200} height={630} loading="lazy" className="block h-auto w-full" />
             <div className="px-3.5 py-[9px] text-[13px] text-[#8E85A3]">conviction.chog.xyz/d/7f3k</div>
           </div>
         </div>

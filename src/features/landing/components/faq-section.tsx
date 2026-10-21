@@ -1,8 +1,9 @@
 const FAQ = [
-  { q: "What do I need to play?", a: "A wallet on Monad holding at least one Chog and enough $CHOG to cover your stake plus gas." },
-  { q: "Where does the burned $CHOG go?", a: "5% of every settled pot is sent to the dead address. It is permanent and visible on-chain." },
+  { q: "What do I need to play?", a: "A wallet on Monad holding at least one Chog, your stake in MON or $CHOG, and a little MON for gas." },
+  { q: "What can I stake?", a: "MON or $CHOG, your pick. Whoever accepts matches the same token and amount." },
+  { q: "Where does the 5% fee go?", a: "5% of every settled pot. $CHOG fees are burned to the dead address; MON fees go to the treasury to buy back $CHOG. A tie refunds both sides with no fee." },
   { q: "What if nobody accepts my call?", a: "Your stake stays in escrow until the deadline, then it is refunded in full. Nothing is burned." },
-  { q: "How is the price decided?", a: "Duels settle against an oracle price at the exact deadline you set when making the call." },
+  { q: "How is the price decided?", a: "Duels settle on the first Chainlink price update at or after the deadline you set when making the call." },
   { q: "Can I cancel a call?", a: "Yes, any time before someone accepts it." },
 ];
 

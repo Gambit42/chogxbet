@@ -1,7 +1,7 @@
 "use client";
 /* eslint-disable @next/next/no-img-element -- Use the supplied Chog artwork. */
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { ArrowUpRight, Check, ExternalLink } from "lucide-react";
 import { toast } from "sonner";
 import { formatEther, parseAbi, parseEther, parseEventLogs, type Abi, type Address, type Chain } from "viem";
@@ -65,12 +65,12 @@ const STEPS: Step[] = [
     reveal: true,
   },
   {
-    title: "tCHOG",
+    title: "$CHOG",
     optional: true,
     blurb: "Only if you want to stake in $CHOG. MON works for every call.",
-    cta: "Claim 1,000 tCHOG",
+    cta: "Claim 1,000 $CHOG",
     image: "/chog-coin.avif",
-    format: (b) => `${fmt(Number(formatEther(b)))} tCHOG`,
+    format: (b) => `${fmt(Number(formatEther(b)))} $CHOG`,
     contract: chog,
     abi: parseAbi(["function mint(address to, uint256 amount)", balanceOf, minted]),
     args: (to) => [to, parseEther("1000")],
@@ -187,7 +187,7 @@ function StepCard({ step, n, image, balance, minted, done, current, wallet, read
         toast.dismiss(id);
         setRevealId(mint.args.tokenId);
       } else {
-        // Token claims' cta names the amount ("Claim 1,000 tCHOG").
+        // Token claims' cta names the amount ("Claim 1,000 $CHOG").
         toast.success(`+${step.cta.replace(/^Claim /, "")}`, {
           id,
           description: "It's in your wallet.",
@@ -303,6 +303,13 @@ function StepCard({ step, n, image, balance, minted, done, current, wallet, read
 /** A freshly minted Chog arrives sealed, then reveals its art and traits on its own once the art loads. */
 function Reveal({ id, onClose }: { id: bigint; onClose: () => void }) {
   const [revealed, setRevealed] = useState(false);
+  const [artFailed, setArtFailed] = useState(false);
+  useEffect(() => {
+    if (revealed) return;
+    // The mint is confirmed; unavailable metadata or artwork must not hold up the user.
+    const timeout = setTimeout(() => setArtFailed(true), 15000);
+    return () => clearTimeout(timeout);
+  }, [revealed]);
   const uri = useReadContract({ address: nft, abi: nftAbi, functionName: "tokenURI", args: [id], chainId: chain.id });
   const meta = useQuery({
     queryKey: ["chog-meta", uri.data],
@@ -310,7 +317,7 @@ function Reveal({ id, onClose }: { id: bigint; onClose: () => void }) {
     enabled: !!uri.data,
     staleTime: Infinity,
   });
-  const failed = uri.isError || meta.isError;
+  const failed = uri.isError || meta.isError || artFailed;
   const traits = meta.data?.attributes?.slice(0, 6) ?? [];
 
   return (
@@ -320,7 +327,7 @@ function Reveal({ id, onClose }: { id: bigint; onClose: () => void }) {
           {revealed ? (meta.data?.name ?? `Chog #${id}`) : `Chog #${id} is yours`}
         </DialogTitle>
         <DialogDescription className="mt-1 text-[14px] text-[#6B6185]">
-          {revealed ? "Your ticket into the Arena." : failed ? "Couldn't load the art. See it on your profile." : "Summoning your Chog…"}
+          {revealed ? "Your ticket into the Arena." : failed ? "Mint complete. The artwork is unavailable right now. You can continue playing." : "Summoning your Chog…"}
         </DialogDescription>
         <div className="relative mt-4 aspect-square overflow-hidden rounded-xl bg-[#1A1130]">
           {meta.data && (
@@ -329,6 +336,7 @@ function Reveal({ id, onClose }: { id: bigint; onClose: () => void }) {
               alt={revealed ? meta.data.name : ""}
               // Hold the sealed "?" a beat so the reveal reads as one, even when the art is cached.
               onLoad={() => setTimeout(() => setRevealed(true), 300)}
+              onError={() => setArtFailed(true)}
               className={`size-full object-cover transition-[filter,scale] duration-700 ease-out motion-reduce:transition-none ${revealed ? "scale-100" : "scale-110 blur-2xl brightness-0"}`}
             />
           )}

@@ -45,8 +45,8 @@ const useNetwork = (): Network => {
 
 const wagmiConfig = createConfig({
   chains: [monad, monadTestnet],
-  // Testnet: optional private URL (else Monad's free public RPC, 50 rps), then Ankr's free RPC if that one errors or rate-limits.
-  transports: { [monad.id]: http(), [monadTestnet.id]: fallback([http(process.env.NEXT_PUBLIC_TESTNET_RPC_URL), http("https://rpc.ankr.com/monad_testnet")]) },
+  // Public RPC first: the configured provider can stall before failing. Bound fallback waits.
+  transports: { [monad.id]: http(), [monadTestnet.id]: fallback([http(undefined, { timeout: 3_000 }), http("https://rpc.ankr.com/monad_testnet", { timeout: 3_000 }), http(process.env.NEXT_PUBLIC_TESTNET_RPC_URL, { timeout: 3_000 })]) },
 });
 const queryClient = new QueryClient();
 

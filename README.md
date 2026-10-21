@@ -1,23 +1,67 @@
-# Chog Conviction
+# ChogXBet
 
-Next.js project with TypeScript, Tailwind CSS v4, and shadcn/ui (Base UI), with a Chog Conviction landing page and betting UI demo at `/app`.
+1v1 price duels for Chog holders on Monad. Make a call ("MON above $0.05 by Oct 23, 12:00 UTC"), stake MON or $CHOG, and anyone who disagrees matches the stake to take the other side. At the deadline a Chainlink price decides the winner, who takes the pot minus a 5% fee. On $CHOG duels the fee is burned; on MON duels it goes to a $CHOG buyback treasury.
 
-See [Monad mainnet deployment plan](MONAD_MAINNET_PLAN.md) for the contract, oracle, wallet, settlement worker, and X/Twitter sharing work needed to launch real duels. Wallet login uses Privy + wagmi; betting actions are still simulated.
+Built for a hackathon, running on **Monad testnet**.
+
+## How it works
+
+1. **Get set up.** Log in with Privy, then use the faucet at `/app/faucet` to mint test $CHOG and a test Chog NFT. You need a Chog to play.
+2. **Make a call.** Pick an asset (MON, BTC, SOL, ETH), above or below a target, a deadline and a stake. Leave the seat open to any Chog holder, or challenge one specific Chog.
+3. **Share it.** Every duel has its own page with a generated share card (`/og`) for X and Discord previews.
+4. **Take a call.** Browse open calls in the Arena and match the stake. Seats close 30 seconds before the deadline.
+5. **Settle.** After the deadline, the settle bot submits the first Chainlink round at or after it. The contract checks it really is that round and pays the winner. A tie refunds both stakes with no fee.
+6. **Claim.** Winnings and refunds wait in the escrow until you claim them from the duel page. If a duel isn't settled within 24 hours, either player can refund both stakes.
+
+The creator can cancel an open call that nobody has taken yet, and reclaim the stake if no one takes it before the deadline.
+
+## Contracts (Monad testnet)
+
+| Contract | Address |
+| --- | --- |
+| `ChogDuel` escrow | `0xdc3D6Bc52f47F1C7c9793ccEbF50102790678dE6` |
+| `MockChog` ($CHOG) | `0x7D62c6fcb324a7a2434697d84Af40671ECA23E9f` |
+| `MockChogNFT` (Chog Genesis) | `0xDE7f6E711B4f966963a7d974e82cf1A8D43515F1` |
+| FeedMirror MON / BTC / SOL / ETH | see `src/features/betting/networks.ts` |
+
+Source lives in `contracts/src`, with tests in `contracts/test`.
+
+### Prices on testnet
+
+Testnet Chainlink has no MON or SOL feed, and its BTC/ETH feeds can go a day without updating. So duels settle on **mainnet** Chainlink prices instead: for each duel that needs settling, the settle bot copies the two mainnet rounds involved into a `FeedMirror` contract on testnet. A copied round can't be edited later, and you can check any of them against mainnet's `getRoundData`. Details are in [TESTNET_ORACLE_MIRROR.md](TESTNET_ORACLE_MIRROR.md).
+
+## Stack
+
+Next.js 16, React 19, Tailwind v4, Privy + wagmi/viem, Foundry, and Chainlink price feeds.
+
+| Path | What |
+| --- | --- |
+| `src/features/betting` | Arena, make a call, duel page, my duels, share card, wallet |
+| `src/features/faucet`, `src/features/profile` | Test token faucet, Chog profile |
+| `src/app/og` | Share card images |
+| `scripts/settle.mts` | Settle bot: settles every accepted duel past its deadline, then exits. Run it on a schedule (every 5 min) |
 
 ## Development
 
 ```sh
 npm install
+cp .env.example .env   # fill in NEXT_PUBLIC_PRIVY_APP_ID and the addresses above
 npm run dev
 ```
 
-Copy `.env.example` to `.env` and fill in the Privy app ID.
+Run the settle bot once against your `.env` (needs `SETTLER_PRIVATE_KEY`):
+
+```sh
+npm run settle:local
+```
+
+Deploy fresh testnet contracts with `npm run deploy:testnet` (mock $CHOG and NFT), then `npm run deploy:duel` (feed mirrors and escrow). Every variable is explained in `.env.example`.
 
 ## Checks
 
 ```sh
 npm run lint
 npm run build
+forge test
+node --test scripts/settlement.test.mjs
 ```
-
-Reusable UI components live in `src/components/ui`. Theme tokens live in `src/app/globals.css`.

@@ -1,12 +1,6 @@
 import { Bookmark, ChartNoAxesColumn, Heart, Image as ImageIcon, MessageCircle, Repeat2, Share, Smile, X } from "lucide-react";
 import { Container } from "@/components/ui/container";
 
-// The attached card is the real /og image; change these params to change both the hero and what X unfurls.
-const card = {
-  title: "$MON ≥ $1.50",
-  sub: "by Dec 31",
-  stake: "25K $CHOG",
-};
 const stats = [
   { Icon: MessageCircle, n: "41" },
   { Icon: Repeat2, n: "96" },
@@ -32,7 +26,7 @@ export default function HeroSection() {
         </span>
         <h1 className="mt-6 text-[clamp(40px,5vw,64px)] leading-none font-semibold tracking-[-.045em] text-balance">Bullpost with conviction.</h1>
         <p className="mt-[22px] max-w-[460px] text-[19px] leading-normal text-pretty text-[#6B6185]">
-          Call your $MON target, stake $CHOG on it, and let another Chog take the other side. One wins the pot, but we&apos;re all rooting for Monad.
+          Back your calls. Pick a price target on MON, BTC, ETH or SOL, put MON or $CHOG behind it, and let another Chog take the other side. Winner takes the pot.
         </p>
         <div className="mt-8 flex flex-wrap gap-2.5 text-[16px]">
           <a href="/app/create" className="rounded-[10px] bg-[#6E56E8] px-[22px] py-3.5 font-semibold text-white">Make a call</a>
@@ -69,7 +63,8 @@ export default function HeroSection() {
               <span className="text-[#6E56E8]">@chog111</span> $1? that&apos;s the floor ser. 25k $CHOG says $1.50
             </div>
             <div className="relative mt-2.5 overflow-hidden rounded-2xl border border-[#ECE8F3]">
-              <img alt={`${card.title} ${card.sub}, ${card.stake} duel`} src={`/og?${new URLSearchParams(card)}`} width={1200} height={630} className="block h-auto w-full" />
+              {/* A saved render of /og?asset=MON&call=above $1.50&when=by Dec 31&stake=25K $CHOG&win=47.5K&chog=7, so the landing page doesn't wait on IPFS. */}
+              <img alt="MON will be above $1.50 by Dec 31, 25K $CHOG duel" src="/card-mon.webp" width={1200} height={630} fetchPriority="high" className="block h-auto w-full" />
               <span className="absolute top-2 right-2 grid size-[26px] place-items-center rounded-full bg-[rgba(15,10,30,.75)] text-white">
                 <X size={14} aria-hidden />
               </span>

@@ -15,9 +15,10 @@ export default function BurnSection() {
     >
       <div>
         <div className="text-[14px] font-semibold text-[#6E56E8]">The burn</div>
-        <h2 className="mt-2.5 text-[44px] leading-[1.05] font-semibold tracking-[-.035em] text-balance">Every duel takes $CHOG out of circulation.</h2>
+        <h2 className="mt-2.5 text-[44px] leading-[1.05] font-semibold tracking-[-.035em] text-balance">Every duel works for $CHOG.</h2>
         <p className="mt-[18px] max-w-[460px] text-[17px] leading-[1.55] text-[#6B6185]">
-          When a duel settles, 5% of the pot is burned. The other 95% goes to the winner. Calls nobody accepts are refunded in full.
+          When a duel settles, the winner takes 95% of the pot. The other 5% is the fee: staked in $CHOG, it&apos;s burned; staked in MON, it funds
+          $CHOG buybacks. Ties and calls nobody accepts are refunded in full.
         </p>
       </div>
       <div className="min-w-0 rounded-[18px] border border-[#ECE8F3] bg-white p-7">

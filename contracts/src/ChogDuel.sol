@@ -12,7 +12,7 @@ interface IPriceFeed {
 }
 
 /// Escrow for 1v1 price calls. A Chog holder locks a stake (MON or $CHOG) on "feed will be above/below target at deadline",
-/// one other Chog holder matches it, and the first Chainlink round at or after the deadline decides the winner.
+/// one other Chog holder (or, for a challenge, whoever holds the named Chog) matches it, and the first Chainlink round at or after the deadline decides the winner.
 /// Payouts and refunds are credited to `owed` and withdrawn with `claim`, so one wallet refusing a transfer can't block the other.
 /// ponytail: unreviewed, testnet only until an independent review.
 contract ChogDuel is ReentrancyGuard {
@@ -40,6 +40,7 @@ contract ChogDuel is ReentrancyGuard {
         address feed; // Chainlink USD price feed, 8 decimals
         uint256 stake;
         uint256 target; // USD, 8 decimals
+        uint256 rival; // Chog token id only its holder may accept; 0 = any Chog holder (ids start at 1)
     }
 
     IERC20 public immutable chog;
@@ -49,8 +50,10 @@ contract ChogDuel is ReentrancyGuard {
     /// Payouts and refunds waiting to be claimed: token => wallet => amount.
     mapping(address => mapping(address => uint256)) public owed;
     Duel[] public duels;
+    /// Block each duel settled in, so the app can link the settle transaction without scanning logs.
+    mapping(uint256 => uint256) public settledBlock;
 
-    event DuelCreated(uint256 indexed id, address indexed creator, address token, uint256 stake, address feed, bool above, uint256 target, uint64 deadline);
+    event DuelCreated(uint256 indexed id, address indexed creator, address token, uint256 stake, address feed, bool above, uint256 target, uint64 deadline, uint256 rival);
     event DuelAccepted(uint256 indexed id, address indexed opponent);
     event DuelCancelled(uint256 indexed id);
     /// `winner` is address(0) on a tie, which refunds both stakes with no fee.
@@ -67,25 +70,28 @@ contract ChogDuel is ReentrancyGuard {
         for (uint256 i; i < feeds.length; i++) isFeed[feeds[i]] = true;
     }
 
-    function create(address token, uint256 stake, address feed, bool above, uint256 target, uint64 deadline) external payable nonReentrant returns (uint256 id) {
+    /// `rival` turns the call into a challenge: only whoever holds that Chog when accepting can take the seat. 0 leaves it open.
+    function create(address token, uint256 stake, address feed, bool above, uint256 target, uint64 deadline, uint256 rival) external payable nonReentrant returns (uint256 id) {
         require(nft.balanceOf(msg.sender) > 0, "need a Chog");
         require(stake > 0 && target > 0, "zero stake or target");
         require(deadline >= block.timestamp + MIN_LEAD, "deadline too soon");
         require(token == address(0) || token == address(chog), "unsupported token");
         require(isFeed[feed], "unsupported feed");
+        require(rival == 0 || nft.ownerOf(rival) != msg.sender, "own Chog"); // ownerOf also reverts for an unminted id
         id = duels.length;
-        duels.push(Duel(msg.sender, deadline, above, Status.Open, address(0), token, feed, stake, target));
-        emit DuelCreated(id, msg.sender, token, stake, feed, above, target, deadline);
+        duels.push(Duel(msg.sender, deadline, above, Status.Open, address(0), token, feed, stake, target, rival));
+        emit DuelCreated(id, msg.sender, token, stake, feed, above, target, deadline, rival);
         _pull(token, stake);
     }
 
-    /// Takes the other side: the first Chog holder to match the stake gets the one seat.
+    /// Takes the other side: the first Chog holder to match the stake gets the one seat (only the rival's holder on a challenge).
     function accept(uint256 id) external payable nonReentrant {
         Duel storage d = duels[id];
         require(d.status == Status.Open, "not open");
         require(msg.sender != d.creator, "own duel");
         require(block.timestamp + ACCEPT_CUTOFF <= d.deadline, "too late to accept");
         require(nft.balanceOf(msg.sender) > 0, "need a Chog");
+        require(d.rival == 0 || nft.ownerOf(d.rival) == msg.sender, "not the challenged Chog");
         d.status = Status.Accepted;
         d.opponent = msg.sender;
         emit DuelAccepted(id, msg.sender);
@@ -115,6 +121,7 @@ contract ChogDuel is ReentrancyGuard {
         require(at >= d.deadline && prevAt > 0 && prevAt < d.deadline, "not the deadline round");
         require(price > 0, "bad price");
         d.status = Status.Settled;
+        settledBlock[id] = block.number;
 
         uint256 p = uint256(price);
         address winner = p == d.target ? address(0) : (p > d.target) == d.above ? d.creator : d.opponent;

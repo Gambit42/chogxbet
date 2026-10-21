@@ -9,7 +9,7 @@ contract MockChog is ERC20 {
     mapping(address => uint256) private _minted; // during _day
     mapping(address => uint256) private _day;
 
-    constructor() ERC20("Test Chog", "tCHOG") {
+    constructor() ERC20("Chog", "CHOG") {
         require(block.chainid == 10143 || block.chainid == 31337, "testnet only");
     }
 

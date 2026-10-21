@@ -6,7 +6,7 @@ const chip = "rounded-[7px] px-2.5 py-[5px]";
 const STEPS: { title: string; body: string; demo: ReactNode }[] = [
   {
     title: "Make your call",
-    body: "Pick an asset, a target and a deadline. Your $CHOG stake goes into escrow on-chain.",
+    body: "Pick an asset, a target and a deadline. Your MON or $CHOG stake goes into escrow on-chain.",
     demo: (
       <div className="flex flex-wrap gap-1.5 text-[14px]">
         <span className={`${chip} bg-[#F1EEFB] font-semibold`}>BTC</span>
@@ -28,7 +28,7 @@ const STEPS: { title: string; body: string; demo: ReactNode }[] = [
   },
   {
     title: "The clock settles it",
-    body: "At the deadline the oracle price decides. The winner is paid out and the burn is sent to the dead address.",
+    body: "At the deadline the oracle price decides. The winner is paid out; the 5% fee is burned ($CHOG) or sent to buybacks (MON).",
     demo: (
       <div className="flex items-center justify-between rounded-[10px] bg-[#E3F6EC] px-3 py-2.5 text-[14px] text-[#1A8A55]">
         <span className="font-semibold">Chog #1044 won</span>

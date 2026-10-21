@@ -84,7 +84,9 @@ function Header() {
   );
 }
 
-const ActiveNav = () => <Nav pathname={usePathname()} />;
+// Header balances: 100K, 10K, 1.1K (the exact figure sits in the hover title).
+const compact = (n: number) => n.toLocaleString("en-US", { notation: "compact", maximumFractionDigits: 1 });
+const ActiveNav =() => <Nav pathname={usePathname()} />;
 
 function Nav({ pathname }: { pathname: string }) {
   const { isTestnet, connected } = useWallet();
@@ -131,7 +133,7 @@ function NetworkToggle() {
 const walletSkeleton = (
   <div aria-busy="true" aria-label="Loading wallet" className="flex items-center gap-2.5">
     {/* Same footprint as the connected balance pill + address button, so nothing jumps when it resolves. */}
-    <span className="h-[34px] w-[126px] animate-pulse rounded-lg bg-[#F1EEFB] motion-reduce:animate-none" />
+    <span className="h-[34px] w-[220px] animate-pulse rounded-lg bg-[#F1EEFB] motion-reduce:animate-none" />
     <span className="flex h-[38px] w-[142px] animate-pulse items-center gap-2 rounded-lg border border-[#ECE8F3] p-[5px] motion-reduce:animate-none">
       <span className="size-[26px] rounded-md bg-[#F1EEFB]" />
       <span className="h-3 flex-1 rounded bg-[#F1EEFB]" />
@@ -169,9 +171,16 @@ function WalletControls() {
 
   return (
     <>
-      <span className="flex flex-none items-center gap-2 rounded-lg bg-[#F1EEFB] px-3 py-[7px] font-mono text-[13px] font-medium whitespace-nowrap">
-        <span className="size-2 rounded-full bg-[#6E56E8]" />
-        {w.chogBalance == null ? "—" : fmt(w.chogBalance)} $CHOG
+      <span className="flex flex-none items-center gap-3 rounded-lg bg-[#F1EEFB] px-3 py-[7px] font-mono text-[13px] font-medium whitespace-nowrap">
+        <span className="flex items-center gap-1.5">
+          <img alt="" src="/chog-coin.avif" className="size-4 rounded-full" />
+          {w.chogBalance == null ? "—" : <span title={fmt(w.chogBalance)}>{compact(w.chogBalance)}</span>}<span className="max-sm:sr-only"> $CHOG</span>
+        </span>
+        <span aria-hidden className="h-3.5 w-px bg-[#D6CEEC]" />
+        <span className="flex items-center gap-1.5">
+          <img alt="" src="/monad-mark.svg" className="size-4 rounded-full" />
+          {w.monBalance == null ? "—" : <span title={fmt(w.monBalance)}>{compact(w.monBalance)}</span>}<span className="max-sm:sr-only"> MON</span>
+        </span>
       </span>
       <DropdownMenu>
         <DropdownMenuTrigger
