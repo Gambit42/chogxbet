@@ -4,7 +4,7 @@ import { Copy, LogOut, UserRound } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useRouter } from "nextjs-toploader/app";
-import type { ReactNode } from "react";
+import { Suspense, type ReactNode } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Container } from "@/components/ui/container";
@@ -43,7 +43,10 @@ export function AppShell({ children }: { children: ReactNode }) {
       <div className="flex min-h-screen flex-col bg-[#faf9fc] font-sans leading-normal text-[#1a1130] antialiased">
         <Header />
         <Container as="main" className="flex-1 pt-8 pb-16">
-          <Onboarding />
+          {/* Onboarding and the nav read the pathname, which dynamic routes (/app/duels/[id]) only know at request time. */}
+          <Suspense>
+            <Onboarding />
+          </Suspense>
           {children}
         </Container>
       </div>
@@ -52,8 +55,7 @@ export function AppShell({ children }: { children: ReactNode }) {
 }
 
 function Header() {
-  const pathname = usePathname();
-  const { isTestnet, connected } = useWallet();
+  const { isTestnet } = useWallet();
   return (
     <header className="sticky top-0 z-5 border-b border-[#ECE8F3] bg-white">
       <Container className="flex flex-wrap items-center gap-7 py-3 min-[901px]:flex-nowrap">
@@ -67,27 +69,41 @@ function Header() {
             </span>
           )}
         </Link>
-        <nav aria-label="App" className="order-3 flex w-full gap-1 min-[901px]:order-none min-[901px]:w-auto">
-          {NAV.filter((n) => (isTestnet || !n.testnetOnly) && (connected || !n.walletOnly)).map(({ href, label }) => {
-            const active = href === "/app" ? pathname === href : pathname.startsWith(href);
-            return (
-              <Link
-                key={href}
-                href={href}
-                aria-current={active ? "page" : undefined}
-                className={`rounded-lg px-3 py-2 text-[15px] font-medium ${active ? "bg-[#F1EEFB] text-[#6E56E8]" : "text-[#6B6185] hover:text-[#1A1130]"}`}
-              >
-                {label}
-              </Link>
-            );
-          })}
-        </nav>
+        <Suspense fallback={<Nav pathname="" />}>
+          <ActiveNav />
+        </Suspense>
         <div className="ml-auto flex items-center gap-2.5">
           {NETWORK_TOGGLE && <NetworkToggle />}
-          <WalletControls />
+          {/* The toploader's router reads the pathname too. */}
+          <Suspense fallback={walletSkeleton}>
+            <WalletControls />
+          </Suspense>
         </div>
       </Container>
     </header>
+  );
+}
+
+const ActiveNav = () => <Nav pathname={usePathname()} />;
+
+function Nav({ pathname }: { pathname: string }) {
+  const { isTestnet, connected } = useWallet();
+  return (
+    <nav aria-label="App" className="order-3 flex w-full gap-1 min-[901px]:order-none min-[901px]:w-auto">
+      {NAV.filter((n) => (isTestnet || !n.testnetOnly) && (connected || !n.walletOnly)).map(({ href, label }) => {
+        const active = href === "/app" ? pathname === href : pathname.startsWith(href);
+        return (
+          <Link
+            key={href}
+            href={href}
+            aria-current={active ? "page" : undefined}
+            className={`rounded-lg px-3 py-2 text-[15px] font-medium ${active ? "bg-[#F1EEFB] text-[#6E56E8]" : "text-[#6B6185] hover:text-[#1A1130]"}`}
+          >
+            {label}
+          </Link>
+        );
+      })}
+    </nav>
   );
 }
 
@@ -112,23 +128,23 @@ function NetworkToggle() {
   );
 }
 
+const walletSkeleton = (
+  <div aria-busy="true" aria-label="Loading wallet" className="flex items-center gap-2.5">
+    {/* Same footprint as the connected balance pill + address button, so nothing jumps when it resolves. */}
+    <span className="h-[34px] w-[126px] animate-pulse rounded-lg bg-[#F1EEFB] motion-reduce:animate-none" />
+    <span className="flex h-[38px] w-[142px] animate-pulse items-center gap-2 rounded-lg border border-[#ECE8F3] p-[5px] motion-reduce:animate-none">
+      <span className="size-[26px] rounded-md bg-[#F1EEFB]" />
+      <span className="h-3 flex-1 rounded bg-[#F1EEFB]" />
+    </span>
+  </div>
+);
+
 function WalletControls() {
   const w = useWallet();
   const router = useRouter();
   const avatar = useChogAvatar(w.ready ? w.address : undefined, w.net.chain.id);
 
-  if (w.loading) {
-    return (
-      <div aria-busy="true" aria-label="Loading wallet" className="flex items-center gap-2.5">
-        {/* Same footprint as the connected balance pill + address button, so nothing jumps when it resolves. */}
-        <span className="h-[34px] w-[126px] animate-pulse rounded-lg bg-[#F1EEFB] motion-reduce:animate-none" />
-        <span className="flex h-[38px] w-[142px] animate-pulse items-center gap-2 rounded-lg border border-[#ECE8F3] p-[5px] motion-reduce:animate-none">
-          <span className="size-[26px] rounded-md bg-[#F1EEFB]" />
-          <span className="h-3 flex-1 rounded bg-[#F1EEFB]" />
-        </span>
-      </div>
-    );
-  }
+  if (w.loading) return walletSkeleton;
 
   if (!w.ready || !w.address) {
     return (

@@ -2,6 +2,7 @@
 /* eslint-disable @next/next/no-img-element -- Use the supplied Chog artwork. */
 import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
+import { ZapIcon } from "lucide-react";
 import { toast } from "sonner";
 import { erc20Abi, formatUnits, parseEventLogs, zeroAddress, type Hex } from "viem";
 import { useConfig, useReadContract, useWriteContract } from "wagmi";
@@ -12,20 +13,21 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { burned, cleanAmount, DEADLINES, duelAbi, feedAbi, MIN_LEAD, fmt, parseStake, payout, pot, TARGET_DECIMALS, toUnits } from "./duel";
 import Link from "next/link";
+import { useRouter } from "nextjs-toploader/app";
 import { NETWORKS } from "./networks";
 import { StepAction, useOnboarding } from "./onboarding";
 import { useWallet } from "./wallet";
 
 // Each asset settles on its Chainlink feed (networks.ts); an asset only shows on networks that have one.
-const ASSETS = {
+export const ASSETS = {
   MON: { name: "Monad", eg: "0.02", bg: "#836EF9", mark: <path transform="translate(6.6 6.4) scale(.8)" fill="#fff" d="M11.7375 0C8.34799 0 0 8.53443 0 11.9999C0 15.4654 8.34799 24 11.7375 24C15.1271 24 23.4752 15.4653 23.4752 11.9999C23.4752 8.53458 15.1272 0 11.7375 0ZM9.90843 18.8619C8.47911 18.4637 4.63621 11.5912 5.02577 10.1299C5.41532 8.66856 12.1374 4.73984 13.5667 5.1381C14.9961 5.5363 18.839 12.4087 18.4494 13.87C18.0599 15.3314 11.3378 19.2602 9.90843 18.8619Z" /> },
   BTC: { name: "Bitcoin", eg: "85,000", bg: "#F7931A", mark: <text x="16" y="22" textAnchor="middle" fontSize="17" fontWeight="700" fill="#fff">₿</text> },
   SOL: { name: "Solana", eg: "110", bg: "#14111F", mark: <g fill="#14F195"><path d="M11 10h12l-2 2.6H9z" /><path d="M9 14.7h12l2 2.6H11z" fill="#9AA5F8" /><path d="M11 19.4h12l-2 2.6H9z" fill="#C86DFF" /></g> },
   ETH: { name: "Ethereum", eg: "2,500", bg: "#627EEA", mark: <g fill="#fff"><path fillOpacity=".6" d="M16.5 4v8.87l7.5 3.35z" /><path d="M16.5 4 9 16.22l7.5-3.35z" /><path fillOpacity=".6" d="M16.5 21.97V28l7.5-10.38z" /><path d="M16.5 28v-6.03L9 17.62z" /><path fillOpacity=".2" d="m16.5 20.57 7.5-4.35-7.5-3.35z" /><path fillOpacity=".6" d="m9 16.22 7.5 4.35v-7.7z" /></g> },
 };
-type Asset = keyof typeof ASSETS;
-const Coin = ({ a }: { a: Asset }) => (
-  <svg viewBox="0 0 32 32" className="size-6 shrink-0" aria-hidden><circle cx="16" cy="16" r="16" fill={ASSETS[a].bg} />{ASSETS[a].mark}</svg>
+export type Asset = keyof typeof ASSETS;
+export const Coin = ({ a, className = "size-6" }: { a: Asset; className?: string }) => (
+  <svg viewBox="0 0 32 32" className={`shrink-0 ${className}`} aria-hidden><circle cx="16" cy="16" r="16" fill={ASSETS[a].bg} />{ASSETS[a].mark}</svg>
 );
 // Each duel is staked in one token; the acceptor matches it. The first preset is the default stake. $CHOG fees are burned, MON fees fund $CHOG buybacks.
 const TOKENS = {
@@ -39,6 +41,7 @@ export function CreateCall() {
   const config = useConfig();
   const queryClient = useQueryClient();
   const { writeContractAsync } = useWriteContract();
+  const router = useRouter();
   const { required, next } = useOnboarding();
   // Until the wallet can duel, the form sits blurred behind its next onboarding step.
   const gate = w.ready ? next : required[0];
@@ -52,15 +55,11 @@ export function CreateCall() {
   const [custom, setCustom] = useState(""); // datetime-local value, used when deadline is "Custom"
   const [token, setToken] = useState<Token>("MON");
   const [stakeText, setStakeText] = useState("1");
-  // The created duel's share link; set once its create transaction confirms.
-  const [link, setLink] = useState<string>();
   const [busy, setBusy] = useState<string>();
   const stake = parseStake(stakeText);
   const t = TOKENS[token];
   const balance = token === "MON" ? w.monBalance : w.chogBalance;
-  const pickToken = (k: Token) => { setToken(k); setStakeText(String(TOKENS[k].presets[0])); setLink(undefined); };
-  // Any edit unlocks the preview so the share card never shows a stale call.
-  const edit = <T,>(set: (v: T) => void) => (v: T) => { set(v); setLink(undefined); };
+  const pickToken = (k: Token) => { setToken(k); setStakeText(String(TOKENS[k].presets[0])); };
 
   const { chain, chog, duel } = w.net;
   const stakeUnits = toUnits(stakeText, 18); // MON and $CHOG both have 18 decimals
@@ -81,7 +80,7 @@ export function CreateCall() {
   const deadlineAt = () => deadline === "Custom" ? Math.floor(new Date(custom).getTime() / 1000) : DEADLINES[deadline].at();
   const when = deadline !== "Custom" ? DEADLINES[deadline].phrase : !custom ? "…" : "by " + new Date(custom).toLocaleString("en-US", { timeZone: "UTC", month: "short", day: "numeric", year: "numeric", hour: "2-digit", minute: "2-digit", hourCycle: "h23" }) + " UTC";
   const problem = !duel ? "Duels aren't live on this network yet" : deadline === "Custom" && !custom ? "Pick a deadline" : !(targetUnits > BigInt(0)) ? "Enter a target price" : !(stakeUnits > BigInt(0)) ? "Enter a stake" : short ? `Not enough ${t.label}` : null;
-  const lockLabel = busy ?? (link ? "Locked ✓" : problem ?? `${needsApproval ? "Approve & lock" : "Lock"} ${fmt(stake)} ${t.label} & get link`);
+  const lockLabel = busy ?? problem ?? `${needsApproval ? "Approve & lock" : "Lock"} ${fmt(stake)} ${t.label} & get link`;
   const claim = `${asset} will be ${dir} $${target || "…"} ${when}.`;
 
   const lock = async () => {
@@ -111,15 +110,15 @@ export function CreateCall() {
         }),
       );
       const [created] = parseEventLogs({ abi: duelAbi, eventName: "DuelCreated", logs: receipt.logs });
-      setLink(`${location.origin}/d/${created.args.id}`);
       queryClient.invalidateQueries();
+      // The duel page is where the creator shares the link.
+      router.push(`/app/duels/${created.args.id}`);
     } catch (e) {
       toast.error((e as { shortMessage?: string }).shortMessage ?? (e as Error).message ?? "Transaction failed");
     } finally {
       setBusy(undefined);
     }
   };
-  const copyLink = () => link && navigator.clipboard.writeText(link).then(() => toast.success("Link copied"), () => {});
   const seg = (on: boolean, fg = "#1A1130") => ({ background: on ? "#fff" : "transparent", color: on ? fg : "#8E85A3" });
 
   return (
@@ -140,10 +139,10 @@ export function CreateCall() {
             </div>
           )}
           <div inert={!!gate} aria-hidden={!!gate} className={`flex flex-col gap-[22px] p-6 transition-[filter] ${gate ? "pointer-events-none blur-[3px] select-none" : ""}`}>
-          <div className="grid grid-cols-2 gap-3.5">
+          <div className="flex flex-col gap-[22px]">
             <div className="flex flex-col gap-1.5 text-[13px] text-[#6B6185]">
               Asset
-              <Select value={asset} onValueChange={(v) => v && edit(setAsset)(v as Asset)}>
+              <Select value={asset} onValueChange={(v) => v && setAsset(v as Asset)}>
                 <SelectTrigger aria-label="Asset" className="h-12 w-full data-[size=default]:h-12 rounded-[10px] border-[#DCD5EC] bg-white px-3 py-0 text-[15px] font-medium text-[#1A1130] hover:border-[#C9BFE3]">
                   <SelectValue>{(v: Asset) => <><Coin a={v} />{v}</>}</SelectValue>
                 </SelectTrigger>
@@ -162,28 +161,29 @@ export function CreateCall() {
               Deadline
               <div className="grid h-12 grid-cols-5 gap-1 rounded-[10px] bg-[#F4F1FA] p-1">
                 {[...Object.keys(DEADLINES), "Custom"].map((d) => (
-                  <Button key={d} variant="plain" onClick={() => edit(setDeadline)(d)} style={seg(deadline === d)} className="h-full rounded-[7px] px-1 py-0 text-[13px] font-medium whitespace-nowrap">
+                  <Button key={d} variant="plain" onClick={() => setDeadline(d)} style={seg(deadline === d)} className="h-full gap-1 rounded-[7px] px-1 py-0 text-[13px] font-medium whitespace-nowrap">
+                    {DEADLINES[d]?.blitz && <ZapIcon aria-hidden className="size-3.5 fill-[#F5A524] text-[#F5A524]" />}
                     {d}
                   </Button>
                 ))}
               </div>
               {deadline === "Custom" && (
-                <Input type="datetime-local" value={custom} onChange={(e) => edit(setCustom)(e.target.value)} className="h-auto rounded-[10px] border-[#DCD5EC] p-3 font-mono text-[15px] text-[#1A1130]" />
+                <Input type="datetime-local" value={custom} onChange={(e) => setCustom(e.target.value)} className="h-auto rounded-[10px] border-[#DCD5EC] p-3 font-mono text-[15px] text-[#1A1130]" />
               )}
             </div>
           </div>
           <div className="flex flex-col gap-1.5 text-[13px] text-[#6B6185]">
             I think it will be
             <div className="grid grid-cols-2 gap-1.5 rounded-[10px] bg-[#F4F1FA] p-1">
-              <Button variant="plain" onClick={() => edit(setDir)("above")} style={seg(dir === "above", "#1A8A55")} className="h-auto rounded-[7px] p-2.5 text-[14px] font-semibold">Above</Button>
-              <Button variant="plain" onClick={() => edit(setDir)("below")} style={seg(dir === "below", "#C43A52")} className="h-auto rounded-[7px] p-2.5 text-[14px] font-semibold">Below</Button>
+              <Button variant="plain" onClick={() => setDir("above")} style={seg(dir === "above", "#1A8A55")} className="h-auto rounded-[7px] p-2.5 text-[14px] font-semibold">Above</Button>
+              <Button variant="plain" onClick={() => setDir("below")} style={seg(dir === "below", "#C43A52")} className="h-auto rounded-[7px] p-2.5 text-[14px] font-semibold">Below</Button>
             </div>
           </div>
           <label className="flex flex-col gap-1.5 text-[13px] text-[#6B6185]">
             <span className="flex justify-between">Target price (USD){price != null && <span className="font-mono text-[#1A1130]">{asset} now ${fmt(price)}</span>}</span>
             <div className="flex items-center rounded-[10px] border border-[#DCD5EC] px-3 focus-within:border-[#C9BFE3]">
               <span className="font-mono text-[17px] font-medium text-[#8E85A3]">$</span>
-              <Input value={target} placeholder={price != null ? fmt(price) : ASSETS[asset].eg} inputMode="decimal" onChange={(e) => edit(setTarget)(cleanAmount(e.target.value, TARGET_DECIMALS))} className="h-auto flex-1 border-0 bg-transparent py-3 pr-0 pl-1 font-mono text-[17px] font-medium text-[#1A1130] shadow-none focus-visible:ring-0" />
+              <Input value={target} placeholder={price != null ? fmt(price) : ASSETS[asset].eg} inputMode="decimal" onChange={(e) => setTarget(cleanAmount(e.target.value, TARGET_DECIMALS))} className="h-auto flex-1 border-0 bg-transparent py-3 pr-0 pl-1 font-mono text-[17px] font-medium text-[#1A1130] shadow-none focus-visible:ring-0" />
             </div>
           </label>
           <div className="flex flex-col gap-1.5 text-[13px] text-[#6B6185]">
@@ -203,7 +203,7 @@ export function CreateCall() {
               <span>Balance {w.ready && balance != null ? `${fmt(balance)} ${t.label}` : "—"}</span>
             </div>
             <div className={`flex items-center rounded-[10px] border px-3 ${short ? "border-[#E8A3AF]" : "border-[#DCD5EC]"}`}>
-              <Input value={stakeText} placeholder="0" inputMode="decimal" onChange={(e) => edit(setStakeText)(cleanAmount(e.target.value, 18))} className="h-auto flex-1 border-0 bg-transparent px-0 py-3 font-mono text-[17px] font-medium text-[#1A1130] shadow-none focus-visible:ring-0" />
+              <Input value={stakeText} placeholder="0" inputMode="decimal" onChange={(e) => setStakeText(cleanAmount(e.target.value, 18))} className="h-auto flex-1 border-0 bg-transparent px-0 py-3 font-mono text-[17px] font-medium text-[#1A1130] shadow-none focus-visible:ring-0" />
               <span className="font-mono text-[13px] font-medium text-[#8E85A3]">{t.label}</span>
             </div>
             {short && (
@@ -218,7 +218,7 @@ export function CreateCall() {
             )}
             <div className="flex gap-1.5">
               {t.presets.map((p) => (
-                <Button key={p} variant="plain" onClick={() => edit(setStakeText)(String(p))} className="h-auto rounded-[7px] border border-[#ECE8F3] bg-white px-2.5 py-1.5 font-mono text-[12px] font-medium text-[#4A4063]">
+                <Button key={p} variant="plain" onClick={() => setStakeText(String(p))} className="h-auto rounded-[7px] border border-[#ECE8F3] bg-white px-2.5 py-1.5 font-mono text-[12px] font-medium text-[#4A4063]">
                   {fmt(p)}
                 </Button>
               ))}
@@ -230,7 +230,7 @@ export function CreateCall() {
             <div className="flex justify-between"><span className="text-[#6B6185]">Settles</span><span className="font-mono">{when}</span></div>
             <div className="flex justify-between border-t border-[#ECE8F3] pt-2.5 font-semibold"><span>You receive if right</span><span className="font-mono text-[#6E56E8]">{fmt(payout(stake))} {t.label}</span></div>
           </div>
-          <Button variant="plain" disabled={!!problem || !!busy || !!link} onClick={lock} className="h-auto rounded-[11px] bg-[#6E56E8] p-[15px] text-[16px] font-semibold text-white disabled:bg-[#C9BFE3] disabled:opacity-100">
+          <Button variant="plain" disabled={!!problem || !!busy} onClick={lock} className="h-auto rounded-[11px] bg-[#6E56E8] p-[15px] text-[16px] font-semibold text-white disabled:bg-[#C9BFE3] disabled:opacity-100">
             {lockLabel}
           </Button>
           </div>
@@ -251,17 +251,8 @@ export function CreateCall() {
               <span className="rounded-full bg-[#A391FF] px-3 py-[7px] text-[13px] font-semibold text-[#140A2A]">Take the bet →</span>
             </div>
           </div>
-          <div className="px-3.5 py-2.5 text-[13px] text-[#8E85A3]">{link ? link.replace(/^https?:\/\//, "") : "conviction.chog.xyz/d/new"}</div>
+          <div className="px-3.5 py-2.5 text-[13px] text-[#8E85A3]">conviction.chog.xyz/app/duels/new</div>
         </div>
-        {link && (
-          <div className="flex flex-col gap-2.5 rounded-xl bg-[#E3F6EC] p-4 text-[14px] text-[#1A8A55]">
-            <span className="font-semibold">Call locked. Share it.</span>
-            <div className="flex gap-2">
-              <a href={`https://x.com/intent/tweet?text=${encodeURIComponent(claim)}&url=${encodeURIComponent(link)}`} target="_blank" rel="noopener noreferrer" className="flex-1 rounded-lg bg-[#1A1130] p-2.5 text-center font-semibold text-white">Post on X</a>
-              <Button variant="plain" onClick={copyLink} className="h-auto rounded-lg border border-[#B8E3CC] bg-white px-3.5 py-2.5 text-[14px] font-semibold text-[#1A8A55]">Copy link</Button>
-            </div>
-          </div>
-        )}
       </div>
     </div>
   );

@@ -10,11 +10,14 @@ import { NETWORKS } from "../src/features/betting/networks.ts";
 
 const { DUEL_CONTRACT_ADDRESS, SETTLER_PRIVATE_KEY, NETWORK, RPC_URL, MAINNET_RPC_URL } = process.env;
 if (!DUEL_CONTRACT_ADDRESS || !SETTLER_PRIVATE_KEY) throw new Error("Set DUEL_CONTRACT_ADDRESS and SETTLER_PRIVATE_KEY");
+// Accept the key with or without 0x, quotes or stray whitespace (viem blindly slices off the first two chars).
+const key = SETTLER_PRIVATE_KEY.trim().replace(/^["']|["']$/g, "").replace(/^0x/i, "");
+if (!/^[0-9a-fA-F]{64}$/.test(key)) throw new Error(`SETTLER_PRIVATE_KEY must be 64 hex chars (got ${key.length} chars after trimming)`);
 const duel = DUEL_CONTRACT_ADDRESS as Address;
 const chain = NETWORK === "mainnet" ? monad : monadTestnet;
 const transport = http(RPC_URL);
 const client = createPublicClient({ chain, transport });
-const wallet = createWalletClient({ chain, transport, account: privateKeyToAccount(SETTLER_PRIVATE_KEY as Hex) });
+const wallet = createWalletClient({ chain, transport, account: privateKeyToAccount(`0x${key}` as Hex) });
 
 // On testnet each duel's feed is a FeedMirror; map it back to the mainnet Chainlink feed it copies.
 const mainnet = createPublicClient({ chain: monad, transport: http(MAINNET_RPC_URL) });

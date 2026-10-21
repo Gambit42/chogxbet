@@ -32,8 +32,29 @@ export const duelAbi = parseAbi([
   // status: 0 Open, 1 Accepted, 2 Cancelled, 3 Settled, 4 Refunded
   "function duels(uint256) view returns (address creator, uint64 deadline, bool above, uint8 status, address opponent, address token, address feed, uint256 stake, uint256 target)",
   "function settle(uint256 id, uint80 roundId)",
+  "function accept(uint256 id) payable",
+  "function cancel(uint256 id)",
+  "function refund(uint256 id)",
+  "function claim(address token)",
+  "function owed(address token, address wallet) view returns (uint256)",
 ]);
+/** Mirrors ChogDuel.ACCEPT_CUTOFF: a call can't be accepted this close to its deadline. */
+export const ACCEPT_CUTOFF = 30;
 export const SETTLE_WINDOW = 24 * 60 * 60;
+
+/** Where a duel stands at unix time `now`: the on-chain status split by the clock (an Open call past its cutoff is Expired, and so on). */
+export type Phase = "Open" | "Expired" | "Live" | "Settling" | "Refundable" | "Cancelled" | "Settled" | "Refunded";
+export function phase(d: { status: number; deadline: number }, now: number): Phase {
+  if (d.status === 0) return now < d.deadline - ACCEPT_CUTOFF ? "Open" : "Expired";
+  if (d.status === 1) return now < d.deadline ? "Live" : now < d.deadline + SETTLE_WINDOW ? "Settling" : "Refundable";
+  return (["Cancelled", "Settled", "Refunded"] as const)[d.status - 2];
+}
+/** Seconds → "2d 4h", "3h 12m", "4m 05s". */
+export const countdown = (s: number) => {
+  s = Math.max(0, Math.floor(s));
+  const [d, h, m, sec] = [Math.floor(s / 86400), Math.floor((s % 86400) / 3600), Math.floor((s % 3600) / 60), s % 60];
+  return d ? `${d}d ${h}h` : h ? `${h}h ${m}m` : `${m}m ${String(sec).padStart(2, "0")}s`;
+};
 
 export const feedAbi = parseAbi([
   "function latestRoundData() view returns (uint80, int256, uint256, uint256, uint80)",
@@ -58,11 +79,11 @@ export async function findRound(client: Pick<PublicClient, "readContract">, feed
 }
 
 // Two quick deadlines and two long ones (23:59 UTC on that day); "Custom" in the form covers anything else.
-// `phrase` finishes the claim: "BTC will be above $90,000 by Dec 31."
+// `phrase` finishes the claim: "BTC will be above $90,000 by Dec 31." `blitz` marks the fast one with a bolt in the form.
 const inMinutes = (m: number) => () => Math.floor(Date.now() / 1000) + m * 60;
 const utc = (y: number, m: number, d: number) => Date.UTC(y, m, d) / 1000 - 60;
-export const DEADLINES: Record<string, { phrase: string; at: () => number }> = {
-  "30 min": { phrase: "in 30 min", at: inMinutes(30) },
+export const DEADLINES: Record<string, { phrase: string; at: () => number; blitz?: true }> = {
+  "5 min": { phrase: "in 5 min", at: inMinutes(5), blitz: true },
   "1 hour": { phrase: "in 1 hour", at: inMinutes(60) },
   "Month end": { phrase: "by month end", at: (now = new Date()) => utc(now.getUTCFullYear(), now.getUTCMonth() + 1, 1) },
   "Dec 31": { phrase: "by Dec 31", at: (now = new Date()) => utc(now.getUTCFullYear() + 1, 0, 1) },
