@@ -10,7 +10,7 @@ export const nftAbi = parseAbi([
 ]);
 
 // Mirror only this collection's artwork; tokenURI metadata stays on IPFS.
-const mirror = "https://kjagkzhddpetwqrosbhj.supabase.co/storage/v1/object/public/chog";
+export const mirror = "https://kjagkzhddpetwqrosbhj.supabase.co/storage/v1/object/public/chog";
 export const ipfs = (uri: string) => uri
   .replace("ipfs://bafybeihau2egcccbdxymeckmmbrqytbfor5gkt3en6d5fsbueymdbq7g6e/", `${mirror}/`)
   .replace(/^ipfs:\/\//, "https://apac.orbitor.dev/ipfs/");

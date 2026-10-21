@@ -2,10 +2,8 @@ import { ImageResponse } from "next/og";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import sharp from "sharp";
-import { createPublicClient, http } from "viem";
-import { NETWORKS } from "@/features/betting/networks";
 import { ShareCard, WinCard } from "@/features/betting/share-card";
-import { ipfs, nftAbi, type Meta } from "@/features/profile/nft";
+import { mirror } from "@/features/profile/nft";
 
 // Duel share card. Every field is a query param, e.g.
 // /og?asset=MON&now=$0.02&call=above $0.025&when=by month end&stake=1 MON&win=1.9, plus &chog=1044 for that Chog's art, &rival=212 for a challenge, and &theme=dark.
@@ -22,14 +20,22 @@ const png = async (b: Buffer, grey = false) => `data:image/png;base64,${(await s
 const mascot = await png(logo);
 const greyMascot = await png(logo, true);
 
-// Same network the duel page metadata reads (see app/duels/[id]/page.tsx).
-const net = Object.values(NETWORKS).find((n) => n.duel);
-async function chogArt(id: string, grey = false) {
-  if (!net?.nft || !/^\d+$/.test(id)) return;
-  const client = createPublicClient({ chain: net.chain, transport: http() });
-  const uri = await client.readContract({ address: net.nft, abi: nftAbi, functionName: "tokenURI", args: [BigInt(id)] });
-  const meta: Meta = await (await fetch(ipfs(uri))).json();
-  return png(Buffer.from(await (await fetch(ipfs(meta.image))).arrayBuffer()), grey);
+// A Chog's art never changes, so each one is fetched once per server instance; a failed fetch is dropped so the next request retries.
+// ponytail: unbounded, but capped by the collection size.
+const arts = new Map<string, Promise<string>>();
+function chogArt(id: string, grey = false) {
+  if (!/^\d+$/.test(id)) return;
+  const key = `${id}:${grey}`;
+  if (!arts.has(key)) arts.set(key, fetchArt(id, grey).catch((e) => { arts.delete(key); throw e; }));
+  return arts.get(key);
+}
+// Straight from the Supabase mirror, skipping the tokenURI read and IPFS metadata hop: MockChogNFT gives Chog #n the
+// collection's n.json, whose art is n.webp (wrapping past 1969 like its tokenURI does).
+// ponytail: mainnet Chog Genesis shuffled art at mint (#1 is 1462.webp), so mainnet needs a stored id → file map.
+async function fetchArt(id: string, grey: boolean) {
+  const res = await fetch(`${mirror}/${(Number(id) - 1) % 1969 + 1}.webp`, { signal: AbortSignal.timeout(4000) });
+  if (!res.ok) throw new Error(`Chog #${id} art: ${res.status}`);
+  return png(Buffer.from(await res.arrayBuffer()), grey);
 }
 
 export async function GET(req: Request) {
@@ -39,7 +45,8 @@ export async function GET(req: Request) {
   const vs = q.get("vs") ?? "";
   const won = q.get("won");
   // no art: keep the mascot
-  const [art, rivalArt, vsArt] = await Promise.all([chogArt(id), chogArt(rival), won ? chogArt(vs, true) : undefined].map((p) => p?.catch(() => undefined)));
+  let missed = false; // an asked-for Chog that fell back to the mascot shouldn't stick in caches
+  const [art, rivalArt, vsArt] = await Promise.all([chogArt(id), chogArt(rival), won ? chogArt(vs, true) : undefined].map((p) => p?.catch(() => { missed = true; return undefined; })));
 
   return new ImageResponse(
     won ? (
@@ -61,6 +68,8 @@ export async function GET(req: Request) {
     {
       width: 1200,
       height: 630,
+      // Everything on the card is in the URL, so a given URL always draws the same image.
+      headers: { "cache-control": missed ? "no-store" : "public, max-age=31536000, s-maxage=31536000, immutable" },
       fonts: [
         { name: "Geist", data: bold, weight: 700, style: "normal" },
         { name: "Geist Mono", data: mono, weight: 600, style: "normal" },

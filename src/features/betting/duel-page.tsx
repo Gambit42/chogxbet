@@ -2,6 +2,7 @@
 /* eslint-disable @next/next/no-img-element -- Chog art comes from IPFS. */
 import Link from "next/link";
 import { useState, useSyncExternalStore, type ReactNode } from "react";
+import { preload } from "react-dom";
 import { useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { formatUnits, zeroAddress, type Address } from "viem";
@@ -98,6 +99,9 @@ function Loaded({ d, chog: linkChog }: { d: Duel; chog?: string }) {
   const closing = useDeadlinePrice(d, p === "Settling");
   const settlement = useSettleLog(d, p === "Settled");
   const settled = settlement.data;
+  // The share card renders server-side in a second or two, so the creator's starts loading with the page, not when the dialog opens.
+  const cardSrc = `/og?${cardQuery(d, asset, live)}${shareQ.size ? `&${shareQ}` : ""}`;
+  if (mine && !cardChog.loading) preload(cardSrc, { as: "image" });
   const price = p === "Live" ? live : p === "Settled" ? settled?.price : closing;
   const lead = price == null ? undefined : price === d.target ? "draw" : (price > d.target) === d.above ? d.creator : d.opponent;
   const outcome = price == null ? undefined : price === d.target ? "Draw" : price > d.target ? "Above" : "Below";
@@ -202,8 +206,7 @@ function Loaded({ d, chog: linkChog }: { d: Duel; chog?: string }) {
                   <div className="relative aspect-[40/21] overflow-hidden rounded-md border border-[#ECE8F3]">
                     <span className={`absolute inset-0 ${skel}`} />
                     {!cardChog.loading && (
-                      <img alt="Share card preview" width={1200} height={630} className="relative size-full"
-                        src={`/og?${cardQuery(d, asset, live)}${shareQ.size ? `&${shareQ}` : ""}`} />
+                      <img alt="Share card preview" width={1200} height={630} className="relative size-full" src={cardSrc} />
                     )}
                   </div>
                   <div className="flex gap-2">
@@ -460,6 +463,9 @@ function WinShare({ d, asset, price, chog, dark: startDark }: { d: Duel; asset: 
   const q = winQuery(d, asset, price, loser, me.chog && String(me.chog.id), them.chog && String(them.chog.id));
   const linkQ = new URLSearchParams({ ...(me.chog && { chog: String(me.chog.id) }), ...(them.chog && { vs: String(them.chog.id) }), ...(dark && { theme: "dark" }) });
   const shareUrl = () => `${location.origin}/app/duels/${d.id}${linkQ.size ? `?${linkQ}` : ""}`;
+  // Both themes start loading with the page, so opening the dialog or flipping the theme doesn't wait on the server.
+  const src = (dark: boolean) => `/og?${q}${dark ? "&theme=dark" : ""}`;
+  if (!me.loading && !them.loading) [false, true].forEach((on) => preload(src(on), { as: "image" }));
   const tweet = `+${q.get("won")} ${q.get("unit")} on ChogXBet. ${q.get("result")}, beat ${q.get("beat")}.`;
   const seg = (on: boolean) => `h-auto cursor-pointer rounded-[7px] p-2 text-[14px] font-semibold ${on ? "bg-white text-[#1A1130]" : "text-[#8E85A3]"}`;
   return (
@@ -469,7 +475,7 @@ function WinShare({ d, asset, price, chog, dark: startDark }: { d: Duel; asset: 
         <DialogTitle className="m-0 text-[16px] leading-snug font-normal"><span className="font-semibold">You called it.</span> <span className="text-[#6B6185]">Post the receipt.</span></DialogTitle>
         <div className="relative aspect-[40/21] overflow-hidden rounded-md border border-[#ECE8F3]">
           <span className={`absolute inset-0 ${skel}`} />
-          {!me.loading && !them.loading && <img alt="Winner card preview" width={1200} height={630} className="relative size-full" src={`/og?${q}${dark ? "&theme=dark" : ""}`} />}
+          {!me.loading && !them.loading && <img alt="Winner card preview" width={1200} height={630} className="relative size-full" src={src(dark)} />}
         </div>
         <div className="grid grid-cols-2 gap-1.5 rounded-[10px] bg-[#ECE8F3] p-1">
           <button type="button" onClick={() => setDark(false)} className={seg(!dark)}>Light</button>
