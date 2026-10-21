@@ -46,11 +46,16 @@ export async function generateMetadata({ params, searchParams }: PageProps<"/app
         return card(q, `+${q.get("won")} ${q.get("unit")} on ${asset} · ChogXBet`);
       }
     }
-    // The live price comes from mainnet Chainlink, which testnet feeds mirror.
+    // "now" is the price the creator's card showed (?now=), so this is the same /og URL they already loaded; without it, the live
+    // price from mainnet Chainlink, which testnet feeds mirror.
+    // ponytail: ?now= is display-only and unchecked, so an edited link can show a wrong "now" but never a wrong call, stake or Chog.
     const main = NETWORKS.mainnet.feeds[asset as keyof typeof NETWORKS.mainnet.feeds];
-    const latest = main && (await createPublicClient({ chain: NETWORKS.mainnet.chain, transport: http() }).readContract({ address: main, abi: feedAbi, functionName: "latestRoundData" }).catch(() => undefined));
-    const q = cardQuery({ above, target, deadline: Number(deadline), stake, token, status, rival }, asset, latest ? latest[1] : undefined);
-    const chog = await holds(one(sp.chog), creator);
+    const linkNow = one(sp.now);
+    const [now, chog] = await Promise.all([
+      linkNow ? BigInt(linkNow) : main && createPublicClient({ chain: NETWORKS.mainnet.chain, transport: http() }).readContract({ address: main, abi: feedAbi, functionName: "latestRoundData" }).then((r) => r[1], () => undefined),
+      holds(one(sp.chog), creator),
+    ]);
+    const q = cardQuery({ above, target, deadline: Number(deadline), stake, token, status, rival }, asset, now);
     if (chog) q.set("chog", chog);
     return card(q, `${asset} ${q.get("call")} ${q.get("when")} · ChogXBet`);
   } catch {

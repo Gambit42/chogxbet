@@ -85,13 +85,12 @@ function Loaded({ d, chog: linkChog }: { d: Duel; chog?: string }) {
   const who = (a: string) => (same(w.address, a) ? "You" : short(a));
   const tweet = `Hot take: ${asset} ${d.above ? "above" : "below"} ${line} by ${utcTime(d.deadline)}. Think I'm wrong? Take the other side for ${fmt(stake)} ${unit}.`;
   const savedJson = useSyncExternalStore(noop, () => { try { return localStorage.getItem(shareKey(w.net.chain.id, d.id)); } catch { return null; } }, () => null);
-  let saved: { chog?: unknown; dark?: unknown } = {};
+  let saved: { chog?: unknown; dark?: unknown; now?: unknown } = {};
   try { saved = JSON.parse(savedJson ?? "{}") ?? {}; } catch {}
   const chog = typeof saved.chog === "string" && /^\d+$/.test(saved.chog) ? saved.chog : linkChog;
   // The shared link carries the card pick (?chog=&theme=) so its preview matches what the creator saw here.
   const cardChog = useProfileChog(d.creator, w.net.chain.id, chog);
   const shareQ = new URLSearchParams({ ...(cardChog.chog && { chog: String(cardChog.chog.id) }), ...(saved.dark === true && { theme: "dark" }) });
-  const shareUrl = () => `${location.origin}/app/duels/${d.id}${shareQ.size ? `?${shareQ}` : ""}`;
 
   // Before the deadline the live price shows who's ahead; after it, the first round past the deadline decides it,
   // and once settled the DuelSettled event already records that price. The creator's card preview shows it too.
@@ -99,9 +98,16 @@ function Loaded({ d, chog: linkChog }: { d: Duel; chog?: string }) {
   const closing = useDeadlinePrice(d, p === "Settling");
   const settlement = useSettleLog(d, p === "Settled");
   const settled = settlement.data;
+  // The card's "now" is frozen so its /og URL doesn't change every refetch: the price the creator locked at, else the first live read here.
+  // The link carries it too (?now=), so the crawler asks for this same, already drawn URL.
+  const [firstLive, setFirstLive] = useState<bigint>();
+  if (firstLive === undefined && live !== undefined) setFirstLive(live);
+  const cardNow = typeof saved.now === "string" && /^\d+$/.test(saved.now) ? BigInt(saved.now) : firstLive;
+  const linkQ = new URLSearchParams([...shareQ, ...(cardNow !== undefined ? [["now", String(cardNow)]] : [])]);
+  const shareUrl = () => `${location.origin}/app/duels/${d.id}${linkQ.size ? `?${linkQ}` : ""}`;
   // The share card renders server-side in a second or two, so the creator's starts loading with the page, not when the dialog opens.
-  const cardSrc = `/og?${cardQuery(d, asset, live)}${shareQ.size ? `&${shareQ}` : ""}`;
-  if (mine && !cardChog.loading) preload(cardSrc, { as: "image" });
+  const cardSrc = `/og?${cardQuery(d, asset, cardNow)}${shareQ.size ? `&${shareQ}` : ""}`;
+  if (mine && !cardChog.loading && cardNow !== undefined) preload(cardSrc, { as: "image" });
   const price = p === "Live" ? live : p === "Settled" ? settled?.price : closing;
   const lead = price == null ? undefined : price === d.target ? "draw" : (price > d.target) === d.above ? d.creator : d.opponent;
   const outcome = price == null ? undefined : price === d.target ? "Draw" : price > d.target ? "Above" : "Below";

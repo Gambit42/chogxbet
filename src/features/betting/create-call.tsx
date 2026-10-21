@@ -1,6 +1,7 @@
 "use client";
 /* eslint-disable @next/next/no-img-element -- Use the supplied Chog artwork. */
 import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
+import { preload } from "react-dom";
 import { AnimatePresence, motion, MotionConfig } from "motion/react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ChevronDownIcon, ZapIcon } from "lucide-react";
@@ -14,7 +15,7 @@ import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { burned, cleanAmount, DEADLINES, duelAbi, feedAbi, MIN_LEAD, fmt, parseStake, payout, pot, shareKey, TARGET_DECIMALS, toUnits } from "./duel";
+import { burned, cardQuery, cleanAmount, DEADLINES, duelAbi, feedAbi, MIN_LEAD, fmt, parseStake, payout, pot, shareKey, TARGET_DECIMALS, toUnits } from "./duel";
 import Link from "next/link";
 import { useRouter } from "nextjs-toploader/app";
 import { ipfs, nftAbi, useProfileChog, type Meta } from "@/features/profile/chogs";
@@ -182,7 +183,14 @@ export function CreateCall() {
 
   const lock = async () => {
     if (!duel || (token === "CHOG" && !chog)) return;
-    if (!(deadlineAt() >= Date.now() / 1000 + MIN_LEAD)) return void toast.error(`Deadline must be at least ${MIN_LEAD / 60} min out`);
+    const at = deadlineAt();
+    if (!(at >= Date.now() / 1000 + MIN_LEAD)) return void toast.error(`Deadline must be at least ${MIN_LEAD / 60} min out`);
+    const tokenAddr = token === "MON" ? zeroAddress : chog!;
+    const rivalId = challenge ? BigInt(rival) : BigInt(0);
+    const now = latest.data?.[1];
+    // Everything on the share card is known before the tx, so /og starts drawing it while the wallet confirms; the duel page asks for the same URL.
+    const pick = new URLSearchParams({ ...(mine && { chog: String(mine.id) }), ...(dark && { theme: "dark" }) });
+    preload(`/og?${cardQuery({ above: dir === "above", target: targetUnits, deadline: at, stake: stakeUnits, token: tokenAddr, status: 0, rival: rivalId }, asset, now)}${pick.size ? `&${pick}` : ""}`, { as: "image" });
     // One click may need two transactions for $CHOG: approve the escrow, then create.
     const send = async (label: string, write: () => Promise<Hex>) => {
       setBusy("Confirm in wallet…");
@@ -201,7 +209,7 @@ export function CreateCall() {
           address: duel,
           abi: duelAbi,
           functionName: "create",
-          args: [token === "MON" ? zeroAddress : chog!, stakeUnits, w.net.feeds[asset]!, dir === "above", targetUnits, BigInt(deadlineAt()), challenge ? BigInt(rival) : BigInt(0)],
+          args: [tokenAddr, stakeUnits, w.net.feeds[asset]!, dir === "above", targetUnits, BigInt(at), rivalId],
           value: token === "MON" ? stakeUnits : undefined,
           chainId: chain.id,
         }),
@@ -209,8 +217,8 @@ export function CreateCall() {
       const [created] = parseEventLogs({ abi: duelAbi, eventName: "DuelCreated", logs: receipt.logs });
       queryClient.invalidateQueries();
       try { if (draftKey) localStorage.removeItem(draftKey); } catch {}
-      // The duel page is where the creator shares the link; it adds this card pick to the shared link, keeping the page's own URL clean.
-      try { localStorage.setItem(shareKey(chain.id, created.args.id), JSON.stringify({ chog: mine && String(mine.id), dark })); } catch {}
+      // The duel page is where the creator shares the link; it adds this card pick and price to the shared link, keeping the page's own URL clean.
+      try { localStorage.setItem(shareKey(chain.id, created.args.id), JSON.stringify({ chog: mine && String(mine.id), dark, now: now?.toString() })); } catch {}
       router.push(`/app/duels/${created.args.id}`);
     } catch (e) {
       toast.error((e as { shortMessage?: string }).shortMessage ?? (e as Error).message ?? "Transaction failed");
