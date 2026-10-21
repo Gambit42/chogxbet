@@ -1,4 +1,4 @@
-# Chog Conviction: Monad mainnet deployment plan
+# ChogXBet: Monad mainnet deployment plan
 
 Updated: 2026-10-20. Status: implementation plan; nothing deployed.
 
