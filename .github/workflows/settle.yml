@@ -21,7 +21,8 @@ jobs:
         with:
           node-version: 24
           cache: npm
-      - run: npm ci --ignore-scripts
+      # Not `npm ci`: a lockfile written on Windows leaves out Tailwind's bundled @emnapi packages and Linux npm ci rejects it.
+      - run: npm install --ignore-scripts --no-audit --no-fund
       - run: npm run settle
         env:
           NETWORK: testnet
