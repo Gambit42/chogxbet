@@ -3,7 +3,8 @@ import { BaseError, ContractFunctionRevertedError, ExecutionRevertedError, decod
 // Duel payout math: both sides stake the same amount, 5% of the pot is burned, the winner takes the rest.
 export const BURN = 0.05;
 
-export const fmt = (n: number) => n.toLocaleString("en-US", { maximumFractionDigits: 2 });
+// Two decimals, except under 1 keep 4 significant digits: MON trades around $0.02, and a $0.0194 line must not read as $0.02.
+export const fmt = (n: number) => n.toLocaleString("en-US", n && Math.abs(n) < 1 ? { maximumSignificantDigits: 4 } : { maximumFractionDigits: 2 });
 export const pot = (stake: number) => stake * 2;
 export const burned = (stake: number) => pot(stake) * BURN;
 export const payout = (stake: number) => pot(stake) - burned(stake);
