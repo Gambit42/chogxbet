@@ -86,7 +86,7 @@ function Loaded({ d }: { d: LwDuel }) {
   const price = p === "Live" ? live : closing;
   const outcome = price == null ? undefined : price === d.target ? "Draw" : price > d.target ? "Above" : "Below";
 
-  const [badge, bg, fg] = p === "Open" ? [`Seat open · ${countdown(d.deadline - ACCEPT_CUTOFF - now)}`, "#F1EEFB", "#6E56E8"] : p === "Settled" && !winner ? ["Draw", "#1A1130", "#FFFFFF"] : BADGE[p];
+  const [badge, bg, fg] = p === "Open" ? [`Seat open · ${countdown(d.deadline - ACCEPT_CUTOFF - now)}`, "#F1EEFB", "#6E56E8"] : p === "Settled" && winner === BigInt(0) ? ["Draw", "#1A1130", "#FFFFFF"] : BADGE[p];
   const tag = p === "Live" ? `Live · ${countdown(d.deadline - now)}` : badge;
 
   // The shared link carries the theme the creator picked (?theme=dark), so the card here matches its link preview.
@@ -249,8 +249,9 @@ function Loaded({ d }: { d: LwDuel }) {
             <div className="mt-4 flex items-center gap-3.5">
               {winner && <Avatar addr={winnerAddr} chog={winner} className="size-14" />}
               <div>
-                <p className="m-0 font-mono text-[20px] font-semibold">{winner ? `Chog #${winner} wins` : "Draw"}</p>
-                <p className="m-0 text-[15px] text-[#6B6185]">{loser ? `Chog #${loser} wears the dare until it wins a Last Word duel back.` : "Exactly on the line. Nobody wears it."}</p>
+                {/* winnerChog is still loading until it's defined; 0 is a draw. */}
+                <p className="m-0 font-mono text-[20px] font-semibold">{winner === undefined ? "Settled" : winner ? `Chog #${winner} wins` : "Draw"}</p>
+                <p className="m-0 text-[15px] text-[#6B6185]">{winner === undefined ? "Loading the result…" : loser ? `Chog #${loser} wears the dare until it wins a Last Word duel back.` : "Exactly on the line. Nobody wears it."}</p>
               </div>
             </div>
             {dareBox(loser ? `Chog #${loser} now says` : "Nobody has to say")}
@@ -262,7 +263,7 @@ function Loaded({ d }: { d: LwDuel }) {
             )}
             <div className="mt-5 flex flex-col gap-2">
               <Link href="/wall" className={`${quiet} text-center`}>See the Wall of Shame</Link>
-              <Link href="/create?mode=lastword" className={`${big} text-center`}>{same(w.address, loserAddr) ? "Win it back" : "Throw down another"}</Link>
+              <Link href={same(w.address, loserAddr) ? `/create?mode=lastword&chog=${loser}` : "/create?mode=lastword"} className={`${big} text-center`}>{same(w.address, loserAddr) ? "Win it back" : "Throw down another"}</Link>
             </div>
           </div>
         ) : (

@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import { formatUnits, type Address } from "viem";
 import { short } from "@/features/betting/app-shell";
 import { assetOf, EmptyState, same, unitOf, useChogRecord, type Encounter } from "@/features/betting/arena";
-import { Wearing } from "@/features/lastword/wall";
+import { useWearing, Wearing } from "@/features/lastword/wall";
 import { payout, TARGET_DECIMALS } from "@/features/betting/duel";
 import { useWallet } from "@/features/betting/wallet";
 import { Sheet, SheetContent, SheetDescription, SheetTitle } from "@/components/ui/sheet";
@@ -184,6 +184,7 @@ export function ProfilePanel({ address: viewed, chog }: { address?: Address; cho
                     {open.id === first?.id ? "Your profile Chog" : "Use as profile Chog"}
                   </Button>
                 )}
+                <WearingNote id={open.id} own={own} />
                 <ChogRecord id={open.id} />
                 <dl className="mt-6 grid grid-cols-2 gap-2">
                   {open.meta?.attributes?.map((a) => (
@@ -199,6 +200,25 @@ export function ProfilePanel({ address: viewed, chog }: { address?: Address; cho
         </SheetContent>
       </Sheet>
     </div>
+  );
+}
+
+// While a Chog wears a dare: how it got it, how it comes off (only a Last Word win or draw; Real stakes don't touch it), and for the owner a way back in with this Chog.
+function WearingNote({ id, own }: { id: bigint; own: boolean }) {
+  const word = useWearing(id);
+  if (!word) return null;
+  return (
+    <section className="mt-6 rounded-xl border border-[#ECE8F3] bg-[#FAF9FC] p-4">
+      <h3 className="m-0 text-[16px] font-semibold">Wearing a dare</h3>
+      <p className="m-0 mt-1.5 text-[14px] leading-normal text-[#6B6185]">
+        It lost <Link href={`/last-word/${word.duel}`} className="font-medium text-[#6E56E8] hover:underline">Last Word #{String(word.duel)}</Link> and says “{word.text}” until it wins or draws a Last Word duel. Real stakes wins don&apos;t clear it.
+      </p>
+      {own && (
+        <Link href={`/create?mode=lastword&chog=${id}`} className="mt-3 inline-flex rounded-[10px] bg-[#6E56E8] px-4 py-2.5 text-[14px] font-semibold text-white hover:brightness-[.96]">
+          Win it back
+        </Link>
+      )}
+    </section>
   );
 }
 

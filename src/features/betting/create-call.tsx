@@ -78,8 +78,8 @@ const slide = {
   exit: (d: number) => ({ x: `${d * -100}%`, opacity: 0 }),
 };
 
-// `preset` comes from the link: ?mode=stake|lastword picks the starting mode.
-export function CreateCall({ preset }: { preset?: { lastWord: boolean } }) {
+// `preset` comes from the link: ?mode=stake|lastword picks the starting mode, ?chog= the Chog to enter with.
+export function CreateCall({ preset }: { preset?: { lastWord: boolean; chog?: string } }) {
   const w = useWallet();
   const config = useConfig();
   const queryClient = useQueryClient();
@@ -104,7 +104,7 @@ export function CreateCall({ preset }: { preset?: { lastWord: boolean } }) {
   const [stakeText, setStakeText] = useState(BLANK.stakeText);
   const [challenge, setChallenge] = useState(BLANK.challenge); // open to any Chog holder, or only to one Chog's holder
   const [rival, setRival] = useState(BLANK.rival); // that Chog's id
-  const [chogPick, setChogPick] = useState(BLANK.chog); // the Chog the creator enters with; "" = their profile Chog
+  const [chogPick, setChogPick] = useState(preset?.chog || BLANK.chog); // the Chog the creator enters with; "" = their profile Chog
   const [mode, setMode] = useState<Mode>(preset?.lastWord ? "lastword" : BLANK.mode);
   // The mode rides the URL (?mode=stake | lastword), so the link opens the same game. The native history API, not the router:
   // a router navigation would remount the form (the page keys it by its search params) and lose what was typed.
@@ -340,7 +340,7 @@ export function CreateCall({ preset }: { preset?: { lastWord: boolean } }) {
                         You were calling {stored.picked} {stored.dir} ${stored.target || "…"}, {stored.mode === "lastword" ? `daring “${stored.dare || "…"}”` : `staking ${stored.stakeText || "0"} ${TOKENS[stored.token].label}`}.
                       </p>
                       <Button variant="plain" onClick={() => pickUp(stored)} className="mt-5 h-auto w-full rounded-[11px] bg-[#6E56E8] p-3 text-[15px] font-semibold text-white">Continue</Button>
-                      <Button variant="plain" onClick={() => pickUp({ ...BLANK, mode })} className="mt-2 h-auto px-3 py-1.5 text-[14px] font-medium text-[#8E85A3] hover:text-[#1A1130]">Start new</Button>
+                      <Button variant="plain" onClick={() => pickUp({ ...BLANK, mode, chog: preset?.chog || BLANK.chog })} className="mt-2 h-auto px-3 py-1.5 text-[14px] font-medium text-[#8E85A3] hover:text-[#1A1130]">Start new</Button>
                     </>
                   )}
                 </div>
