@@ -4,7 +4,7 @@ name: Settle duels
 
 on:
   schedule:
-    - cron: "*/5 * * * *"
+    - cron: "*/5 * * * *" # edited to re-register the schedule
   workflow_dispatch:
 
 # One run at a time, so two runs never race to settle the same duel.
