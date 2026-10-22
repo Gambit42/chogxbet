@@ -1,0 +1,32 @@
+# Runs the settle bot (scripts/settle.mts) every 5 minutes. GitHub runs schedules best-effort, so a run can start late or be skipped
+# under load; duels have 24h to settle, so that only delays a payout. Run it by hand from the Actions tab with "Run workflow".
+name: Settle duels
+
+on:
+  schedule:
+    - cron: "*/5 * * * *"
+  workflow_dispatch:
+
+# One run at a time, so two runs never race to settle the same duel.
+concurrency:
+  group: settle
+
+jobs:
+  settle:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - run: npm run settle
+        env:
+          NETWORK: testnet
+          DUEL_CONTRACT_ADDRESS: "0xaeBbCAC97d50488bc63172295e99C78b8F4743c0"
+          LASTWORD_CONTRACT_ADDRESS: "0x6bF4AFE60BF2077E54f0D5AeeaA9E785BCE2ae96"
+          # A wallet holding only gas MON; settling is permissionless, so the key has no other power.
+          SETTLER_PRIVATE_KEY: ${{ secrets.SETTLER_PRIVATE_KEY }}
+          # RPC_URL is left unset on purpose: the public Monad RPC works here, the origin-whitelisted Alchemy key doesn't.

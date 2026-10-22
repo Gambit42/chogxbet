@@ -1,8 +1,8 @@
 "use client";
-import { useQueries } from "@tanstack/react-query";
+import { useQueries, useQuery } from "@tanstack/react-query";
 import { useSyncExternalStore } from "react";
 import type { Address } from "viem";
-import { useReadContracts } from "wagmi";
+import { useReadContract, useReadContracts } from "wagmi";
 import { networkOf } from "@/features/betting/networks";
 import { ipfs, nftAbi, type Meta } from "./nft";
 
@@ -50,6 +50,19 @@ export function useOwnedChogs(owner: Address | undefined, chainId: number) {
   const loading = !!owner && !!nft && (count.isLoading || owners.isLoading);
   const chogs = mine.map((id, i): Owned => ({ id, meta: metas[i]?.data, pending: !metas[i]?.data && !metas[i]?.isError && !uris.isError }));
   return { loading, chogs };
+}
+
+/** Any Chog's tokenURI and metadata by id, whoever holds it now; same cache key as useOwnedChogs. An unminted id fails `uri` at once. */
+export function useChogMeta(id: bigint | undefined, chainId: number) {
+  const nft = networkOf(chainId)?.nft;
+  const uri = useReadContract({ address: nft, abi: nftAbi, functionName: "tokenURI", args: [id ?? BigInt(0)], chainId, query: { enabled: !!id && !!nft, retry: false } });
+  const meta = useQuery({
+    queryKey: ["chog-meta", String(id), uri.data],
+    queryFn: async (): Promise<Meta> => (await fetch(ipfs(uri.data!))).json(),
+    enabled: !!uri.data,
+    staleTime: Infinity,
+  });
+  return { uri, meta };
 }
 
 // ponytail: the profile pick lives in this browser only; move it server-side if it must follow the wallet across devices.

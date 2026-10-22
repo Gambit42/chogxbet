@@ -6,7 +6,7 @@ import { ShareCard, WinCard } from "@/features/betting/share-card";
 import { mirror } from "@/features/profile/nft";
 
 // Duel share card. Every field is a query param, e.g.
-// /og?asset=MON&now=$0.02&call=above $0.025&when=by month end&stake=1 MON&win=1.9, plus &chog=1044 for that Chog's art, &rival=212 for a challenge, and &theme=dark.
+// /og?asset=MON&now=$0.02&call=above $0.025&when=by month end&stake=1 MON&win=1.9, plus &chog=1044 for that Chog's art, &rival=212 for a challenge, &dare=… for a Last Word duel, and &theme=dark.
 // A settled duel's winner card instead: /og?won=9.5&unit=MON&beat=Chog #212&result=MON closed above $0.10&chog=7&vs=212.
 const file = (p: string) => readFile(join(process.cwd(), p));
 const [bold, mono, logo] = await Promise.all([
@@ -59,7 +59,8 @@ export async function GET(req: Request) {
       when={q.get("when") ?? "by Dec 31"}
       stake={q.get("stake") ?? "25K $CHOG"}
       win={q.get("win") ?? "47.5K"}
-      cta={q.get("cta") ?? "Seat open →"}
+      cta={q.get("cta") ?? "Fade me →"}
+      dare={q.get("dare") ?? undefined}
       art={art ?? mascot}
       chog={art ? id : undefined}
       rival={/^\d+$/.test(rival) ? { id: rival, art: rivalArt ?? mascot } : undefined}

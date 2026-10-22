@@ -26,15 +26,17 @@ export const toUnits = (s: string, decimals: number) => {
 // The ChogDuel escrow's calls the app makes. Targets are USD with 8 decimals.
 export const TARGET_DECIMALS = 8;
 export const duelAbi = parseAbi([
-  "function create(address token, uint256 stake, address feed, bool above, uint256 target, uint64 deadline, uint256 rival) payable returns (uint256)",
-  "event DuelCreated(uint256 indexed id, address indexed creator, address token, uint256 stake, address feed, bool above, uint256 target, uint64 deadline, uint256 rival)",
+  "function create(address token, uint256 stake, address feed, bool above, uint256 target, uint64 deadline, uint256 rival, uint256 chog) payable returns (uint256)",
+  "event DuelCreated(uint256 indexed id, address indexed creator, address token, uint256 stake, address feed, bool above, uint256 target, uint64 deadline, uint256 rival, uint256 chog)",
   "function count() view returns (uint256)",
   // status: 0 Open, 1 Accepted, 2 Cancelled, 3 Settled, 4 Refunded; rival: the Chog id a challenge is for, 0 = open to any holder
-  "function duels(uint256) view returns (address creator, uint64 deadline, bool above, uint8 status, address opponent, address token, address feed, uint256 stake, uint256 target, uint256 rival)",
+  // creatorChog / opponentChog: the Chog each side entered with (0 = seat still open)
+  "function duels(uint256) view returns (address creator, uint64 deadline, bool above, uint8 status, address opponent, address token, address feed, uint256 stake, uint256 target, uint256 rival, uint256 creatorChog, uint256 opponentChog)",
+  "function winnerChog(uint256) view returns (uint256)",
   "function settle(uint256 id, uint80 roundId)",
   "function settledBlock(uint256) view returns (uint256)",
   "event DuelSettled(uint256 indexed id, address indexed winner, uint256 price, uint80 roundId)",
-  "function accept(uint256 id) payable",
+  "function accept(uint256 id, uint256 chog) payable",
   "function cancel(uint256 id)",
   "function refund(uint256 id)",
   "function claim(address token)",
@@ -136,7 +138,7 @@ export function cardQuery(d: { above: boolean; target: bigint; deadline: number;
     when: `by ${when} UTC`,
     stake: `${fmt(s)} ${d.token === zeroAddress ? "MON" : "$CHOG"}`,
     win: fmt(payout(s)),
-    cta: d.status !== 0 ? "View duel →" : d.rival ? `#${d.rival}, accept →` : "Seat open →",
+    cta: d.status !== 0 ? "View duel →" : d.rival ? `#${d.rival}, accept →` : "Fade me →",
   });
   if (d.rival) q.set("rival", String(d.rival));
   if (now !== undefined) q.set("now", usd(now));

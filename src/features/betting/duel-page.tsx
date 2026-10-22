@@ -1,6 +1,7 @@
 "use client";
 /* eslint-disable @next/next/no-img-element -- Chog art comes from IPFS. */
 import Link from "next/link";
+import { SearchX } from "lucide-react";
 import { useState, useSyncExternalStore, type ReactNode } from "react";
 import { preload } from "react-dom";
 import { useQuery } from "@tanstack/react-query";
@@ -9,37 +10,36 @@ import { formatUnits, zeroAddress, type Address } from "viem";
 import { monad } from "viem/chains";
 import { usePublicClient, useReadContract } from "wagmi";
 import { Dialog, DialogContent, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { ipfs, useProfileChog } from "@/features/profile/chogs";
+import { ipfs, useChogMeta, useProfileChog } from "@/features/profile/chogs";
 import { short } from "./app-shell";
 import { ASSETS, Coin, type Asset } from "./coins";
-import { assetOf, BADGE, DuelAction, same, toDuel, unitOf, useCanTake, useNow, useTx, utcTime, type Duel } from "./arena";
+import { assetOf, BADGE, ChogPicker, DuelAction, EmptyState, same, toDuel, unitOf, useCanTake, useNow, useTx, utcTime, type Duel } from "./arena";
 import { ACCEPT_CUTOFF, burned, cardQuery, countdown, duelAbi, feedAbi, findRound, findSettledBlock, fmt, payout, phase, pot, SETTLE_WINDOW, shareKey, TARGET_DECIMALS, winQuery } from "./duel";
 import { NETWORKS } from "./networks";
 import { useWallet } from "./wallet";
 
-const big = "w-full cursor-pointer rounded-[12px] bg-[#6E56E8] p-4 text-[16px] font-semibold text-white hover:brightness-[.96] disabled:cursor-default disabled:opacity-70";
-const panel = "rounded-[20px] border border-[#ECE8F3] bg-white p-6 shadow-[0_16px_48px_rgba(110,86,232,.12)]";
-const eyebrow = "m-0 font-mono text-[12px] font-medium tracking-[.14em] text-[#6B6185]";
-const skel = "block animate-pulse rounded-[12px] bg-[#F1EEFB] motion-reduce:animate-none";
+export const big = "w-full cursor-pointer rounded-[12px] bg-[#6E56E8] p-4 text-[16px] font-semibold text-white hover:brightness-[.96] disabled:cursor-default disabled:opacity-70";
+export const panel = "rounded-[20px] border border-[#ECE8F3] bg-white p-6 shadow-[0_16px_48px_rgba(110,86,232,.12)]";
+export const eyebrow = "m-0 font-mono text-[12px] font-medium tracking-[.14em] text-[#6B6185]";
+export const skel = "block animate-pulse rounded-[12px] bg-[#F1EEFB] motion-reduce:animate-none";
 
 // One duel: the call, both seats, the rules, and a side panel that is the bet slip while the seat is open, the proposed
 // outcome while it settles, and the result once it has.
-export function DuelPage({ id, chog }: { id: string; chog?: string }) {
+export function DuelPage({ id }: { id: string }) {
   const w = useWallet();
   const { chain, duel } = w.net;
   const valid = /^\d+$/.test(id);
-  const read = useReadContract({ address: duel, abi: duelAbi, functionName: "duels", args: [BigInt(valid ? id : 0)], chainId: chain.id, query: { enabled: !!duel && valid } });
+  const read = useReadContract({ address: duel, abi: duelAbi, functionName: "duels", args: [BigInt(valid ? id : 0)], chainId: chain.id, query: { enabled: !!duel && valid, refetchInterval: 15_000 } });
   const d = read.data && toDuel(read.data, BigInt(id));
   if (!valid || read.isError || !duel) {
     return (
-      <div className="rounded-2xl border border-dashed border-[#DCD5EC] bg-white px-6 py-16 text-center">
-        <p className="m-0 text-[17px] font-semibold">Duel not found</p>
-        <Link href="/app" className="mt-4 inline-block text-[14px] font-semibold text-[#6E56E8] hover:underline">Back to open calls</Link>
-      </div>
+      <EmptyState icon={SearchX} title="Duel not found" text="This link doesn't point to a duel on this network.">
+        <Link href="/" className="text-[14px] font-semibold text-[#6E56E8] hover:underline">Back to open calls</Link>
+      </EmptyState>
     );
   }
   if (!d) return <DuelSkeleton />;
-  return <Loaded d={d} chog={chog} />;
+  return <Loaded d={d} />;
 }
 
 // Mirrors Loaded's two columns: the call, seats and rules on the left, the side panel on the right.
@@ -51,7 +51,7 @@ export function DuelSkeleton() {
           <span className={`size-16 shrink-0 rounded-full sm:size-[72px] ${skel}`} />
           <div className="flex min-w-0 flex-1 flex-col gap-3"><span className={`h-9 w-4/5 ${skel}`} /><span className={`h-5 w-3/5 ${skel}`} /></div>
         </div>
-        <div className={`mt-8 h-[160px] ${skel}`} />
+        <div className={`mt-8 aspect-[2/1] rounded-[20px] ${skel}`} />
         <span className={`mt-8 h-[280px] rounded-[20px] ${skel}`} />
         <span className={`mt-10 h-6 w-20 ${skel}`} />
         <span className={`mt-3 h-16 ${skel}`} />
@@ -68,8 +68,7 @@ export function DuelSkeleton() {
 
 const noop = () => () => {};
 
-// The creator's Chog, shown on their seat: their pick on the create page (kept in their browser), else the shared link's ?chog=.
-function Loaded({ d, chog: linkChog }: { d: Duel; chog?: string }) {
+function Loaded({ d }: { d: Duel }) {
   const w = useWallet();
   const now = useNow();
   const p = phase(d, now);
@@ -85,12 +84,16 @@ function Loaded({ d, chog: linkChog }: { d: Duel; chog?: string }) {
   const who = (a: string) => (same(w.address, a) ? "You" : short(a));
   const tweet = `Hot take: ${asset} ${d.above ? "above" : "below"} ${line} by ${utcTime(d.deadline)}. Think I'm wrong? Take the other side for ${fmt(stake)} ${unit}.`;
   const savedJson = useSyncExternalStore(noop, () => { try { return localStorage.getItem(shareKey(w.net.chain.id, d.id)); } catch { return null; } }, () => null);
-  let saved: { chog?: unknown; dark?: unknown; now?: unknown } = {};
+  let saved: { dark?: unknown; now?: unknown } = {};
   try { saved = JSON.parse(savedJson ?? "{}") ?? {}; } catch {}
-  const chog = typeof saved.chog === "string" && /^\d+$/.test(saved.chog) ? saved.chog : linkChog;
-  // The shared link carries the card pick (?chog=&theme=) so its preview matches what the creator saw here.
-  const cardChog = useProfileChog(d.creator, w.net.chain.id, chog);
-  const shareQ = new URLSearchParams({ ...(cardChog.chog && { chog: String(cardChog.chog.id) }), ...(saved.dark === true && { theme: "dark" }) });
+  // The card shows the Chog the creator entered with; the shared link carries the theme (?theme=) so its preview matches what the creator saw here.
+  const shareQ = new URLSearchParams({ chog: String(d.creatorChog), ...(saved.dark === true && { theme: "dark" }) });
+  // The Chog the viewer would take the seat with: the challenged one, else their pick here, else their profile Chog,
+  // never the creator's own (it may have been transferred to the viewer since).
+  const [pick, setPick] = useState<string>();
+  const viewer = useProfileChog(w.address, w.net.chain.id, pick);
+  const choices = viewer.chogs.filter((c) => c.id !== d.creatorChog);
+  const entry = d.rival || (viewer.chog && viewer.chog.id !== d.creatorChog ? viewer.chog.id : choices[0]?.id);
 
   // Before the deadline the live price shows who's ahead; after it, the first round past the deadline decides it,
   // and once settled the DuelSettled event already records that price. The creator's card preview shows it too.
@@ -104,10 +107,10 @@ function Loaded({ d, chog: linkChog }: { d: Duel; chog?: string }) {
   if (firstLive === undefined && live !== undefined) setFirstLive(live);
   const cardNow = typeof saved.now === "string" && /^\d+$/.test(saved.now) ? BigInt(saved.now) : firstLive;
   const linkQ = new URLSearchParams([...shareQ, ...(cardNow !== undefined ? [["now", String(cardNow)]] : [])]);
-  const shareUrl = () => `${location.origin}/app/duels/${d.id}${linkQ.size ? `?${linkQ}` : ""}`;
+  const shareUrl = () => `${location.origin}/duels/${d.id}${linkQ.size ? `?${linkQ}` : ""}`;
   // The share card renders server-side in a second or two, so the creator's starts loading with the page, not when the dialog opens.
   const cardSrc = `/og?${cardQuery(d, asset, cardNow)}${shareQ.size ? `&${shareQ}` : ""}`;
-  if (mine && !cardChog.loading && cardNow !== undefined) preload(cardSrc, { as: "image" });
+  if (mine && cardNow !== undefined) preload(cardSrc, { as: "image" });
   const price = p === "Live" ? live : p === "Settled" ? settled?.price : closing;
   const lead = price == null ? undefined : price === d.target ? "draw" : (price > d.target) === d.above ? d.creator : d.opponent;
   const outcome = price == null ? undefined : price === d.target ? "Draw" : price > d.target ? "Above" : "Below";
@@ -115,20 +118,18 @@ function Loaded({ d, chog: linkChog }: { d: Duel; chog?: string }) {
   const [badge, bg, fg] = p === "Open" ? [`Seat open · ${countdown(d.deadline - ACCEPT_CUTOFF - now)}`, "#F1EEFB", "#6E56E8"] : BADGE[p];
   const tag = p === "Live" ? `Live · ${countdown(d.deadline - now)}` : p === "Settled" && outcome ? `Resolved · ${outcome}` : badge;
 
-  const status = (a: Address) => {
-    if (p === "Open") return <span className="rounded-[10px] bg-[#F4F2F8] px-5 py-2 text-[15px] font-semibold text-[#B3ABC6]">Taken</span>;
-    if (p === "Live" || p === "Settling") return <Tone>Locked</Tone>;
-    if (p === "Settled") return lead === undefined ? <Tone>Settled</Tone> : lead === "draw" ? <Tone>Back {fmt(stake)}</Tone> : same(lead, a) ? <Tone hi>Won {fmt(payout(stake))}</Tone> : <Tone>Lost {fmt(stake)}</Tone>;
-    return <Tone>{{ Refundable: "Refund due", Refunded: "Refunded", Cancelled: "Returned", Expired: "Unmatched" }[p]}</Tone>;
-  };
+  // The corner tag on a seat's art: the result once settled, who's ahead while it runs.
+  const mark = (a: Address) =>
+    p === "Settled" && lead ? (lead === "draw" ? "DRAW" : same(lead, a) ? "WINNER" : "LOSER")
+    : (p === "Live" || p === "Settling") && lead && lead !== "draw" && same(lead, a) ? "AHEAD" : undefined;
 
   // What a settled player sees once nothing is left to claim.
   const next = (
     <>
-      {settled && same(w.address, lead) && <WinShare d={d} asset={asset} price={settled.price} chog={chog} dark={saved.dark === true} />}
+      {settled && same(w.address, lead) && <WinShare d={d} asset={asset} price={settled.price} dark={saved.dark === true} />}
       {/* Only the two players get a rematch nudge: the winner rides the streak, the loser takes revenge, a draw just makes another call. */}
       {(mine || same(w.address, d.opponent)) && (
-        <Link href="/app/create" className={`${big.replace("bg-[#6E56E8]", "border border-[#DCD5EC] bg-white").replace("text-white", "text-[#1A1130]")} text-center`}>
+        <Link href="/create" className={`${big.replace("bg-[#6E56E8]", "border border-[#DCD5EC] bg-white").replace("text-white", "text-[#1A1130]")} text-center`}>
           {same(w.address, lead) ? "Feeling lucky?" : lead === "draw" ? "Make another call" : "Take revenge"}
         </Link>
       )}
@@ -153,36 +154,28 @@ function Loaded({ d, chog: linkChog }: { d: Duel; chog?: string }) {
           </div>
         </div>
 
-        <div className="mt-8">
-          <div className="grid grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-x-4 border-b border-[#ECE8F3] pb-3 font-mono text-[12px] font-medium tracking-[.14em] text-[#6B6185] sm:grid-cols-[minmax(0,1fr)_150px_110px_120px]">
-            <span>PLAYER</span><span>SIDE</span><span className="max-sm:hidden">STAKE</span><span className="text-right">STATUS</span>
-          </div>
-          <Seat addr={d.creator} chog={chog} sub="Creator" side={`${d.above ? "Above" : "Below"} ${line}`} creator stake={`${fmt(stake)} ${unit}`} status={status(d.creator)} />
-          {seated ? (
-            <Seat addr={d.opponent} chog={d.rival ? String(d.rival) : undefined} sub="Challenger" side={`${d.above ? "Below" : "Above"} ${line}`} stake={`${fmt(stake)} ${unit}`} status={status(d.opponent)} />
-          ) : (
-            <Seat
-              sub={p === "Open" ? (d.rival ? `Reserved for Chog #${d.rival}` : "Waiting for a challenger") : p === "Cancelled" ? "Call cancelled" : "Nobody took it"}
-              side={`${d.above ? "Below" : "Above"} ${line}`}
-              stake="–"
-              status={p === "Open" && !mine ? <DuelAction d={d} take={`Take · ${fmt(stake)}`} className="cursor-pointer rounded-[10px] bg-[#6E56E8] px-5 py-2 text-[15px] font-semibold whitespace-nowrap text-white hover:brightness-[.96] disabled:opacity-70" /> : <Tone>{p === "Open" ? "Open" : "—"}</Tone>}
-            />
-          )}
-        </div>
+        <Faceoff seats={[
+          { addr: d.creator, chog: d.creatorChog, side: `${d.above ? "Above" : "Below"} ${line}`, mark: mark(d.creator) },
+          seated
+            ? { addr: d.opponent, chog: d.opponentChog, side: `${d.above ? "Below" : "Above"} ${line}`, mark: mark(d.opponent) }
+            : {
+              chog: p === "Open" ? d.rival || undefined : undefined, side: `${d.above ? "Below" : "Above"} ${line}`, mark: p === "Open" && d.rival ? "PENDING" : undefined,
+              empty: p === "Open" ? (d.rival ? "Waiting to accept" : "Waiting for a challenger") : p === "Cancelled" ? "Call cancelled" : "Nobody took it",
+            },
+        ]} />
 
         <OracleCard d={d} asset={asset} />
         <h2 className="mt-10 mb-0 text-[18px] font-semibold">Rules</h2>
         <p className="mt-2 text-[16px] leading-relaxed text-[#6B6185] text-pretty">
           Resolves Above if the first Chainlink {asset}/USD price after {utcTime(d.deadline)} is above {line}, Below if it&apos;s under; exactly {line} is a draw and both stakes go back.
-          Each side stakes {fmt(stake)} {unit}. Winner takes the pot minus a 5% {unit === "MON" ? "fee that funds $CHOG buybacks" : "burn"}. If it isn&apos;t settled within 24h of the deadline, both stakes refund.
-        </p>
+          Each side stakes {fmt(stake)} {unit}. Winner takes the pot minus a 5% {unit === "MON" ? "fee that funds $CHOG buybacks" : "burn"}. If it isn&apos;t settled within 24h of the deadline, both stakes refund.        </p>
       </div>
 
       <div className="min-[901px]:sticky min-[901px]:top-24">
         {p === "Open" ? (
           <div className={panel}>
             <div className="flex items-center gap-3">
-              <Avatar addr={w.address} className="size-11" />
+              <Avatar addr={w.address} chog={mine ? d.creatorChog : entry} className="size-11" />
               <p className="m-0 text-[18px] font-semibold">{mine ? "Issue the challenge" : canTake ? "Take the other side" : `Challenge to Chog #${d.rival}`}</p>
             </div>
             <div className="mt-5 grid grid-cols-2 gap-2">
@@ -201,6 +194,12 @@ function Loaded({ d, chog: linkChog }: { d: Duel; chog?: string }) {
               <Row k={`${fee} 5%`} v={fmt(burned(stake))} />
               <div className="flex items-baseline justify-between"><span className="text-[#6B6185]">To win</span><span className="font-mono text-[18px] font-semibold text-[#6E56E8]">{fmt(payout(stake))} {unit}</span></div>
             </div>
+            {!mine && canTake && !d.rival && viewer.chogs.length > 1 && (
+              <div className="mt-5 flex flex-col gap-2 text-[14px] text-[#6B6185]">
+                Enter with
+                <ChogPicker chogs={choices} value={entry} onPick={(id) => setPick(String(id))} />
+              </div>
+            )}
             {mine && (
               <Dialog>
                 <DialogTrigger className="mt-5 w-full cursor-pointer rounded-[12px] bg-[#6E56E8] p-4 text-[16px] font-semibold text-white hover:brightness-[.96]">Share your call</DialogTrigger>
@@ -211,9 +210,7 @@ function Loaded({ d, chog: linkChog }: { d: Duel; chog?: string }) {
                   {/* The same /og image the link unfurls to; the pulse sits under it until it loads. */}
                   <div className="relative aspect-[40/21] overflow-hidden rounded-md border border-[#ECE8F3]">
                     <span className={`absolute inset-0 ${skel}`} />
-                    {!cardChog.loading && (
-                      <img alt="Share card preview" width={1200} height={630} className="relative size-full" src={cardSrc} />
-                    )}
+                    <img alt="Share card preview" width={1200} height={630} className="relative size-full" src={cardSrc} />
                   </div>
                   <div className="flex gap-2">
                     <button type="button" onClick={() => window.open(`https://x.com/intent/tweet?text=${encodeURIComponent(tweet)}&url=${encodeURIComponent(shareUrl())}`, "_blank", "noopener")}
@@ -225,7 +222,7 @@ function Loaded({ d, chog: linkChog }: { d: Duel; chog?: string }) {
               </Dialog>
             )}
             {/* For the creator this is "Cancel call", so it stays quiet under the share button. */}
-            <div className="mt-3 empty:hidden"><DuelAction d={d} className={mine ? undefined : big} take={`Take ${d.above ? "Below" : "Above"}`} /></div>
+            <div className="mt-3 empty:hidden"><DuelAction d={d} chog={entry} className={mine ? undefined : big} take={`Take ${d.above ? "Below" : "Above"}`} /></div>
             <p className="mt-4 mb-0 text-[14px] text-[#6B6185]">
               {mine ? `If nobody takes it by ${utcTime(d.deadline - ACCEPT_CUTOFF)}, reclaim your stake.` : canTake ? "Fixed stakes. No odds, no slippage." : `Only the wallet holding Chog #${d.rival} can take this.`}
             </p>
@@ -276,7 +273,7 @@ function Loaded({ d, chog: linkChog }: { d: Duel; chog?: string }) {
           <div className={panel}>
             <p className={eyebrow}>FINAL</p>
             <div className="mt-4 flex items-center gap-3.5">
-              {lead && lead !== "draw" && <Avatar addr={lead} chog={same(lead, d.creator) ? chog : undefined} className="size-14" />}
+              {lead && lead !== "draw" && <Avatar addr={lead} chog={same(lead, d.creator) ? d.creatorChog : d.opponentChog} className="size-14" />}
               <div>
                 <p className="m-0 font-mono text-[20px] font-semibold">
                   {lead === undefined ? "Settled" : lead === "draw" ? "Draw" : `${who(lead)} ${same(w.address, lead) ? "win" : "wins"}`}
@@ -328,11 +325,11 @@ const NOTE = {
 
 const STEPS = ["Matched", "Live", "Settling", "Paid out"];
 // Vertical timeline: done milestones are solid, the current one is a ring with its note underneath, later ones are grey.
-const Steps = ({ at, note }: { at: number; note: string }) => (
+export const Steps = ({ at, note, steps = STEPS }: { at: number; note: string; steps?: string[] }) => (
   <ol className="mt-5 mb-0 list-none border-t border-[#ECE8F3] p-0 pt-5 text-[16px]">
-    {STEPS.map((s, i) => (
+    {steps.map((s, i) => (
       <li key={s} aria-current={i === at ? "step" : undefined} className="relative flex gap-3 pb-4 last:pb-0">
-        {i < STEPS.length - 1 && <span aria-hidden className={`absolute top-5 -bottom-1 left-[7px] w-0.5 ${i < at ? "bg-[#6E56E8]" : "bg-[#ECE8F3]"}`} />}
+        {i < steps.length - 1 && <span aria-hidden className={`absolute top-5 -bottom-1 left-[7px] w-0.5 ${i < at ? "bg-[#6E56E8]" : "bg-[#ECE8F3]"}`} />}
         <span aria-hidden className={`relative mt-1 size-4 shrink-0 rounded-full ${i < at ? "bg-[#6E56E8]" : i === at ? "border-4 border-[#6E56E8] bg-white" : "border-2 border-[#DCD5EC] bg-white"}`} />
         <div className="min-w-0">
           <span className={i === at ? "font-semibold text-[#6E56E8]" : i < at ? "text-[#1A1130]" : "text-[#B3ABC6]"}>{s}</span>
@@ -342,13 +339,13 @@ const Steps = ({ at, note }: { at: number; note: string }) => (
     ))}
   </ol>
 );
-const Row = ({ k, v }: { k: string; v: string }) => <div className="flex justify-between gap-4"><span className="text-[#6B6185]">{k}</span><span className="text-right font-mono">{v}</span></div>;
-const Tone = ({ hi, children }: { hi?: boolean; children: ReactNode }) => <span className={`font-mono text-[16px] font-medium ${hi ? "text-[#6E56E8]" : "text-[#B3ABC6]"}`}>{children}</span>;
+export const Row = ({ k, v }: { k: string; v: string }) => <div className="flex justify-between gap-4"><span className="text-[#6B6185]">{k}</span><span className="text-right font-mono">{v}</span></div>;
 
-// Where the outcome comes from: the duel's own feed and escrow, linked so anyone can check them on the explorer.
-function OracleCard({ d, asset }: { d: Duel; asset: string }) {
+// Where the outcome comes from: the duel's own feed and escrow (ChogDuel unless `escrow` says otherwise), linked so anyone can check them on the explorer.
+export function OracleCard({ d, asset, escrow, unsettled = "anyone can trigger a full refund" }: { d: { feed: Address; deadline: number }; asset: string; escrow?: Address; unsettled?: string }) {
   const w = useWallet();
-  const { chain, duel } = w.net;
+  const { chain } = w.net;
+  const duel = escrow ?? w.net.duel;
   const now = useNow();
   const latest = useReadContract({ address: d.feed, abi: feedAbi, functionName: "latestRoundData", chainId: chain.id, query: { refetchInterval: 15_000 } });
   const at = latest.data && Number(latest.data[3]);
@@ -368,45 +365,67 @@ function OracleCard({ d, asset }: { d: Duel; asset: string }) {
         {duel && <div className="flex justify-between gap-4"><span className="text-[#6B6185]">Escrow contract</span>{link(duel)}</div>}
       </div>
       <p className="mt-5 mb-0 border-t border-[#ECE8F3] pt-4 text-[14px] leading-normal text-[#6B6185]">
-        ChogXBet can&apos;t change the outcome. If it isn&apos;t settled by {utcTime(d.deadline + SETTLE_WINDOW)}, anyone can trigger a full refund.
+        ChogXBet can&apos;t change the outcome. If it isn&apos;t settled by {utcTime(d.deadline + SETTLE_WINDOW)}, {unsettled}.
       </p>
     </div>
   );
 }
 
-/** The wallet's Chog (`chog` if it still holds that one), or a dashed empty seat when there's no wallet. */
-function Avatar({ addr, chog: prefer, className }: { addr?: Address; chog?: string; className: string }) {
+/** The Chog a seat entered with (`chog`), else the wallet's profile Chog, or a dashed empty seat when there's no wallet. */
+export function Avatar({ addr, chog: entered, className }: { addr?: Address; chog?: bigint; className: string }) {
   const w = useWallet();
-  const chog = useProfileChog(addr, w.net.chain.id, prefer).chog?.meta;
+  const profile = useProfileChog(entered ? undefined : addr, w.net.chain.id).chog?.meta;
+  const chog = useChogMeta(entered, w.net.chain.id).meta.data ?? profile;
   if (!addr) return <span className={`shrink-0 rounded-full border-2 border-dashed border-[#DCD5EC] ${className}`} />;
   return chog ? <img alt="" src={ipfs(chog.image)} className={`shrink-0 rounded-full object-cover ${className}`} /> : <span className={`shrink-0 rounded-full bg-[#F1EEFB] ${className}`} />;
 }
 
-// A row in the player table; no `addr` is the open seat.
-function Seat({ addr, chog: prefer, sub, side, creator, stake, status }: { addr?: Address; chog?: string; sub: string; side: string; creator?: boolean; stake: string; status: ReactNode }) {
+type Fighter = { addr?: Address; chog?: bigint; side: string; mark?: string; empty?: string };
+// Both seats' Chogs side by side, creator on the left. A loser (or a challenge not yet accepted) is greyed out;
+// a seat nobody holds shows `empty` in a dashed box. Under each, its wallet, Chog and whether it's the viewer.
+export function Faceoff({ seats }: { seats: [Fighter, Fighter] }) {
   const w = useWallet();
-  const chog = useProfileChog(addr, w.net.chain.id, prefer).chog?.meta;
-  const you = same(w.address, addr);
-  const name = !addr ? "Open seat" : [short(addr), chog?.name].filter(Boolean).join(" · ");
+  const chain = w.net.chain.id;
+  const metas = [useChogMeta(seats[0].chog, chain).meta.data, useChogMeta(seats[1].chog, chain).meta.data];
   return (
-    <div className="grid grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-x-4 border-b border-[#ECE8F3] py-4 sm:grid-cols-[minmax(0,1fr)_150px_110px_120px]">
-      <div className="flex min-w-0 items-center gap-3.5">
-        {/* The viewer's own seat: ringed avatar and YOU in place of Creator/Challenger, so the faceoff reads at a glance. */}
-        <Avatar addr={addr} chog={prefer} className={`size-11 sm:size-12 ${you ? "ring-2 ring-[#6E56E8] ring-offset-2" : ""}`} />
-        <div className="min-w-0 leading-tight">
-          <div className="truncate text-[17px] font-semibold">{name}</div>
-          <div className={`mt-1 truncate text-[14px] ${you ? "font-semibold tracking-[.08em] text-[#6E56E8]" : "text-[#6B6185]"}`}>{you ? "YOU" : sub}</div>
-        </div>
+    <div className="mt-8">
+      <div className="relative grid grid-cols-2 overflow-hidden rounded-[20px] border border-[#ECE8F3] bg-[#F1EEFB]">
+        {seats.map((s, i) => {
+          const at = i ? "right-3" : "left-3";
+          const grey = s.mark === "LOSER" || s.mark === "PENDING";
+          return (
+            <div key={i} className={`relative aspect-square ${i ? "border-l border-white" : ""}`}>
+              {metas[i] ? (
+                <img alt={metas[i].name} src={ipfs(metas[i].image)} className={`size-full object-cover ${grey ? "opacity-60 grayscale" : ""}`} />
+              ) : s.empty ? (
+                <div className="absolute inset-4 grid place-items-center rounded-[14px] border-2 border-dashed border-[#DCD5EC] p-4 text-center text-[15px] font-semibold text-[#6B6185] text-balance">{s.empty}</div>
+              ) : (
+                <span className="absolute inset-0 animate-pulse motion-reduce:animate-none" />
+              )}
+              {s.mark && (
+                <span className={`absolute top-3 ${at} rounded-md px-2 py-1 font-mono text-[11px] font-semibold tracking-[.12em] ${grey ? "bg-white/90 text-[#6B6185]" : "bg-[#6E56E8] text-white"}`}>{s.mark}</span>
+              )}
+              <span className={`absolute bottom-3 ${at} rounded-lg px-2.5 py-1.5 text-[13px] font-semibold whitespace-nowrap shadow-sm sm:text-[14px] ${i ? "bg-[#6E56E8] text-white" : "bg-white text-[#1A1130]"}`}>{s.side}</span>
+            </div>
+          );
+        })}
+        <span className="absolute top-1/2 left-1/2 grid size-12 -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full bg-[#1A1130] text-[15px] font-bold text-white ring-4 ring-white">VS</span>
       </div>
-      <span className={`text-[16px] font-semibold ${creator ? "text-[#24135F]" : "text-[#6E56E8]"}`}>{side}</span>
-      <span className="font-mono text-[16px] max-sm:hidden">{stake}</span>
-      <span className="flex justify-end">{status}</span>
+      <div className="mt-3 grid grid-cols-2 gap-4 font-mono text-[13px] text-[#6B6185]">
+        {seats.map((s, i) => (
+          <div key={i} className={`min-w-0 truncate ${i ? "text-right" : ""}`}>
+            {s.addr ? <Link href={`/u/${s.addr}${s.chog ? `?chog=${s.chog}` : ""}`} className="hover:text-[#6E56E8]">{short(s.addr)}</Link> : !s.chog && "Open seat"}
+            {!!s.chog && `${s.addr ? " · " : ""}CHOG #${s.chog}`}
+            {same(w.address, s.addr) && <span className="font-semibold text-[#6E56E8]"> · You</span>}
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
 
 /** The latest mainnet Chainlink price for the duel's asset, which testnet feeds mirror. */
-function useLivePrice(d: Duel, enabled: boolean) {
+export function useLivePrice(d: { feed: Address }, enabled: boolean) {
   const w = useWallet();
   const latest = useReadContract({
     address: NETWORKS.mainnet.feeds[assetOf(w, d)], abi: feedAbi, functionName: "latestRoundData", chainId: NETWORKS.mainnet.chain.id,
@@ -419,7 +438,7 @@ function useLivePrice(d: Duel, enabled: boolean) {
  * The price the duel settles on: the mainnet Chainlink round right after the deadline. On testnet the duel's feed is a
  * FeedMirror that copies exactly that round, so reading mainnet gives the same answer before and after settlement.
  */
-function useDeadlinePrice(d: Duel, enabled: boolean) {
+export function useDeadlinePrice(d: { feed: Address; deadline: number }, enabled: boolean) {
   const w = useWallet();
   const mainnet = usePublicClient({ chainId: monad.id });
   const feed = NETWORKS.mainnet.feeds[assetOf(w, d)];
@@ -457,21 +476,19 @@ function useSettleLog(d: Duel, enabled: boolean) {
   return q;
 }
 
-// The winner's brag card behind a Share button: the same /og image the duel link unfurls to once settled, with both players' Chogs.
-// `chog` is the creator's Chog (as on their seat); a challenge's opponent is the called-out Chog.
-function WinShare({ d, asset, price, chog, dark: startDark }: { d: Duel; asset: string; price: bigint; chog?: string; dark: boolean }) {
+// The winner's brag card behind a Share button: the same /og image the duel link unfurls to once settled, with the Chogs both sides entered with.
+function WinShare({ d, asset, price, dark: startDark }: { d: Duel; asset: string; price: bigint; dark: boolean }) {
   const w = useWallet();
   const [dark, setDark] = useState(startDark);
-  const seatChog = (a: Address) => (same(a, d.creator) ? chog : d.rival ? String(d.rival) : undefined);
-  const loser = same(w.address, d.creator) ? d.opponent : d.creator;
-  const me = useProfileChog(w.address, w.net.chain.id, w.address && seatChog(w.address));
-  const them = useProfileChog(loser, w.net.chain.id, seatChog(loser));
-  const q = winQuery(d, asset, price, loser, me.chog && String(me.chog.id), them.chog && String(them.chog.id));
-  const linkQ = new URLSearchParams({ ...(me.chog && { chog: String(me.chog.id) }), ...(them.chog && { vs: String(them.chog.id) }), ...(dark && { theme: "dark" }) });
-  const shareUrl = () => `${location.origin}/app/duels/${d.id}${linkQ.size ? `?${linkQ}` : ""}`;
+  const isCreator = same(w.address, d.creator);
+  const loser = isCreator ? d.opponent : d.creator;
+  const [me, them] = (isCreator ? [d.creatorChog, d.opponentChog] : [d.opponentChog, d.creatorChog]).map(String);
+  const q = winQuery(d, asset, price, loser, me, them);
+  const linkQ = new URLSearchParams(dark ? { theme: "dark" } : {});
+  const shareUrl = () => `${location.origin}/duels/${d.id}${linkQ.size ? `?${linkQ}` : ""}`;
   // Both themes start loading with the page, so opening the dialog or flipping the theme doesn't wait on the server.
   const src = (dark: boolean) => `/og?${q}${dark ? "&theme=dark" : ""}`;
-  if (!me.loading && !them.loading) [false, true].forEach((on) => preload(src(on), { as: "image" }));
+  [false, true].forEach((on) => preload(src(on), { as: "image" }));
   const tweet = `+${q.get("won")} ${q.get("unit")} on ChogXBet. ${q.get("result")}, beat ${q.get("beat")}.`;
   const seg = (on: boolean) => `h-auto cursor-pointer rounded-[7px] p-2 text-[14px] font-semibold ${on ? "bg-white text-[#1A1130]" : "text-[#8E85A3]"}`;
   return (
@@ -481,7 +498,7 @@ function WinShare({ d, asset, price, chog, dark: startDark }: { d: Duel; asset: 
         <DialogTitle className="m-0 text-[16px] leading-snug font-normal"><span className="font-semibold">You called it.</span> <span className="text-[#6B6185]">Post the receipt.</span></DialogTitle>
         <div className="relative aspect-[40/21] overflow-hidden rounded-md border border-[#ECE8F3]">
           <span className={`absolute inset-0 ${skel}`} />
-          {!me.loading && !them.loading && <img alt="Winner card preview" width={1200} height={630} className="relative size-full" src={src(dark)} />}
+          <img alt="Winner card preview" width={1200} height={630} className="relative size-full" src={src(dark)} />
         </div>
         <div className="grid grid-cols-2 gap-1.5 rounded-[10px] bg-[#ECE8F3] p-1">
           <button type="button" onClick={() => setDark(false)} className={seg(!dark)}>Light</button>

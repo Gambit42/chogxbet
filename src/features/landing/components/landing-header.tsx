@@ -3,7 +3,8 @@ import { Container } from "@/components/ui/container";
 export default function LandingHeader() {
   return (
     <header className="sticky top-0 z-10 border-b border-[#ECE8F3] bg-white/90 backdrop-blur-[10px]">
-      <Container className="flex items-center gap-8 py-3.5 max-[900px]:flex-wrap max-[900px]:gap-4 max-sm:gap-2.5 max-sm:py-3">
+      {/* Same height as the app header (py-3 around the 40px logo), so moving between the two doesn't jump. */}
+      <Container className="flex items-center gap-8 py-3 max-[900px]:flex-wrap max-[900px]:gap-4 max-sm:gap-2.5">
         <div className="flex items-center gap-2.5 text-[17px] font-semibold tracking-[-.01em]">
           <img alt="ChogXBet logo" src="/chog-logo.png" className="size-10 shrink-0 rounded-[10px]" />
           ChogXBet

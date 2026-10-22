@@ -13,6 +13,8 @@ export const NETWORKS = {
     // ChogDuel escrow (contracts/src); not on mainnet until it has settlement and a review.
     duel: undefined as Address | undefined,
     duelFromBlock: BigInt(0),
+    // LastWord (contracts/src): the no-stakes mode where the loser's Chog wears the dare. Testnet only for now.
+    lastWord: undefined as Address | undefined,
     // Chainlink USD price feeds (8 decimals) the escrow allowlists; checked on-chain 2026-10-21.
     feeds: {
       MON: "0xBcD78f76005B7515837af6b50c7C52BCf73822fb",
@@ -28,8 +30,9 @@ export const NETWORKS = {
     chog: process.env.NEXT_PUBLIC_CHOG_ADDRESS as Address | undefined,
     nft: process.env.NEXT_PUBLIC_CHOG_NFT_ADDRESS as Address | undefined,
     duel: process.env.NEXT_PUBLIC_DUEL_ADDRESS as Address | undefined,
-    // Deployment block of 0xdc3D...8dE6 (2026-10-21).
-    duelFromBlock: BigInt(72970103),
+    lastWord: process.env.NEXT_PUBLIC_LASTWORD_ADDRESS as Address | undefined,
+    // Deployment block of 0xaeBb...43c0 (2026-10-22).
+    duelFromBlock: BigInt(73204505),
     // FeedMirrors (contracts/src/testnet) the settle cron fills with mainnet Chainlink rounds; deployed by DeployDuel.s.sol 2026-10-21.
     feeds: {
       MON: "0x597152837F69f4186F36f9ed21446D9E56AaC509",
@@ -37,8 +40,8 @@ export const NETWORKS = {
       SOL: "0x5aD5803fED64aAE5110E3d5F32FeC9Ed0913f492",
       ETH: "0xf36469dc7C31FD14F1DA65978d8b5F680149D882",
     } as Partial<Record<string, Address>>,
-    getChog: "/app/faucet",
-    getNft: "/app/faucet",
+    getChog: "/faucet",
+    getNft: "/faucet",
   },
 };
 export type Network = keyof typeof NETWORKS;

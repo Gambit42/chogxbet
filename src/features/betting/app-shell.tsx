@@ -16,16 +16,18 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { fmt } from "./duel";
+import { useChallenges } from "./my-duels";
 import { useChogAvatar } from "@/features/profile/chogs";
 import { Onboarding } from "./onboarding";
 import { appId, NETWORK_TOGGLE, useWallet, WalletProviders } from "./wallet";
 
-// The app's pages. Add a route under src/app/app/ and list it here to put it in the header.
+// The app's pages (app.chogxbet.xyz). Add a route under src/app/(app)/ and list it here to put it in the header; the logo is home (the open calls).
 const NAV = [
-  { href: "/app", label: "Arena" },
-  { href: "/app/create", label: "Make a call" },
-  { href: "/app/duels", label: "My duels", walletOnly: true },
-  { href: "/app/faucet", label: "Faucet", testnetOnly: true },
+  { href: "/", label: "Live duels" },
+  { href: "/create", label: "Create" },
+  { href: "/duels", label: "My duels", walletOnly: true },
+  { href: "/wall", label: "Wall of Shame" },
+  { href: "/faucet", label: "Faucet", testnetOnly: true },
 ];
 
 export const short = (a: string) => `${a.slice(0, 6)}…${a.slice(-4)}`;
@@ -43,7 +45,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       <div className="flex min-h-screen flex-col bg-[#faf9fc] font-sans leading-normal text-[#1a1130] antialiased">
         <Header />
         <Container as="main" className="flex-1 pt-8 pb-16">
-          {/* Onboarding and the nav read the pathname, which dynamic routes (/app/duels/[id]) only know at request time. */}
+          {/* Onboarding and the nav read the pathname, which dynamic routes (/duels/[id]) only know at request time. */}
           <Suspense>
             <Onboarding />
           </Suspense>
@@ -61,13 +63,16 @@ function Header() {
       <Container className="flex flex-wrap items-center gap-7 py-3 min-[901px]:flex-nowrap">
         <Link href="/" className="flex items-center gap-2.5 text-[17px] font-semibold tracking-[-.01em] text-[#1A1130]">
           <img src="/chog-logo.png" alt="ChogXBet logo" className="size-10 shrink-0 rounded-[10px]" />
-          ChogXBet
-          {isTestnet && (
-            <span className="flex items-center gap-1.5 rounded-full border border-[#F2D7A6] bg-[#FDF5E6] px-2 py-0.5 text-[12px] font-semibold tracking-normal text-[#9A6412]">
-              <span aria-hidden className="size-1.5 rounded-full bg-[#E8A33D]" />
-              Testnet
-            </span>
-          )}
+          {/* The network sits under the name, not beside it, so the header row stays short. */}
+          <span className="flex flex-col leading-tight">
+            ChogXBet
+            {isTestnet && (
+              <span className="flex items-center gap-1 text-[11px] font-semibold tracking-normal text-[#9A6412]">
+                <span aria-hidden className="size-1.5 rounded-full bg-[#E8A33D]" />
+                Testnet
+              </span>
+            )}
+          </span>
         </Link>
         <Suspense fallback={<Nav pathname="" />}>
           <ActiveNav />
@@ -89,11 +94,12 @@ const compact = (n: number) => n.toLocaleString("en-US", { notation: "compact", 
 const ActiveNav =() => <Nav pathname={usePathname()} />;
 
 function Nav({ pathname }: { pathname: string }) {
-  const { isTestnet, connected } = useWallet();
+  const { isTestnet, ready, address } = useWallet();
+  const challenges = useChallenges().length;
   return (
     <nav aria-label="App" className="order-3 flex w-full gap-1 min-[901px]:order-none min-[901px]:w-auto">
-      {NAV.filter((n) => (isTestnet || !n.testnetOnly) && (connected || !n.walletOnly)).map(({ href, label }) => {
-        const active = href === "/app" ? pathname === href : pathname.startsWith(href);
+      {NAV.filter((n) => (isTestnet || !n.testnetOnly) && (!n.walletOnly || (ready && address))).map(({ href, label }) => {
+        const active = href === "/" ? pathname === "/" : pathname.startsWith(href);
         return (
           <Link
             key={href}
@@ -102,6 +108,12 @@ function Nav({ pathname }: { pathname: string }) {
             className={`rounded-lg px-3 py-2 text-[15px] font-medium ${active ? "bg-[#F1EEFB] text-[#6E56E8]" : "text-[#6B6185] hover:text-[#1A1130]"}`}
           >
             {label}
+            {/* The app's only notification: open challenges to your Chogs, listed at the top of My duels. */}
+            {href === "/duels" && challenges > 0 && (
+              <span aria-label={`, ${challenges} challenge${challenges > 1 ? "s" : ""} to you`} className="ml-1.5 inline-flex min-w-5 justify-center rounded-full bg-[#E5484D] px-1.5 text-[12px] leading-5 font-semibold text-white">
+                {challenges}
+              </span>
+            )}
           </Link>
         );
       })}
@@ -154,7 +166,8 @@ function WalletControls() {
         <Button
           variant="plain"
           onClick={w.connected ? w.switchChain : w.login}
-          className="h-auto rounded-lg bg-[#6E56E8] px-4 py-[9px] text-[14px] font-semibold text-white"
+          // h-10 matches the logo, so the header is the landing header's height whatever state the wallet is in.
+          className="h-10 rounded-lg bg-[#6E56E8] px-4 py-0 text-[14px] font-semibold text-white"
         >
           {w.connected ? `Switch to ${w.net.chain.name}` : "Connect wallet"}
         </Button>
@@ -199,7 +212,7 @@ function WalletControls() {
           {short(address)}
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="w-auto min-w-48">
-          <DropdownMenuItem className="px-2.5 py-2" onClick={() => router.push("/app/profile")}>
+          <DropdownMenuItem className="px-2.5 py-2" onClick={() => router.push("/profile")}>
             <UserRound />
             Profile
           </DropdownMenuItem>

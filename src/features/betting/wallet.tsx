@@ -141,7 +141,8 @@ export function WalletProviders({ children }: { children: ReactNode }) {
       }}
     >
       <QueryClientProvider client={queryClient}>
-        <WagmiProvider config={wagmiConfig}>
+        {/* Use the signed-in account's own wallet; otherwise a browser wallet left connected from another login (e.g. an extension) wins. */}
+        <WagmiProvider config={wagmiConfig} setActiveWalletForWagmi={({ wallets, user }) => wallets.find((x) => x.address.toLowerCase() === user?.wallet?.address.toLowerCase()) ?? wallets[0]}>
           <WalletState>{children}</WalletState>
         </WagmiProvider>
       </QueryClientProvider>

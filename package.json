@@ -13,6 +13,7 @@
     "deploy:chog": "forge create contracts/src/testnet/MockChog.sol:MockChog --rpc-url monad_testnet --browser --broadcast",
     "deploy:nft": "forge create contracts/src/testnet/MockChogNFT.sol:MockChogNFT --rpc-url monad_testnet --browser --broadcast",
     "deploy:duel": "forge script contracts/script/DeployDuel.s.sol:DeployDuel --rpc-url monad_testnet --browser --broadcast",
+    "deploy:lastword": "forge script contracts/script/DeployLastWord.s.sol:DeployLastWord --rpc-url monad_testnet --browser --broadcast",
     "deploy:testnet": "npm run deploy:chog && npm run deploy:nft",
     "settle": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/settle.mts",
     "settle:local": "node --env-file=.env --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/settle.mts"

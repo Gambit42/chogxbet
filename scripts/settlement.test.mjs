@@ -4,7 +4,7 @@ import { ContractFunctionRevertedError, ExecutionRevertedError, encodeFunctionRe
 import { duelAbi, findSettledBlock } from "../src/features/betting/duel.ts";
 
 const address = zeroAddress;
-const result = (status) => encodeFunctionResult({ abi: duelAbi, functionName: "duels", result: [address, 0n, false, status, address, address, address, 0n, 0n, 0n] });
+const result = (status) => encodeFunctionResult({ abi: duelAbi, functionName: "duels", result: [address, 0n, false, status, address, address, address, 0n, 0n, 0n, 0n, 0n] });
 const legacy = (settledAt) => ({
   readContract: async () => { throw new ContractFunctionRevertedError({ abi: duelAbi, functionName: "settledBlock" }); },
   getBlockNumber: async () => 1000n,

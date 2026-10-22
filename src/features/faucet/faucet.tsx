@@ -137,7 +137,7 @@ export function FaucetPanel() {
           </p>
         </div>
         {allDone && (
-          <Link href="/app" className="flex w-full justify-center rounded-[10px] bg-[#6E56E8] px-4 py-3 text-[15px] font-semibold text-white hover:brightness-[.96] sm:w-auto">
+          <Link href="/" className="flex w-full justify-center rounded-[10px] bg-[#6E56E8] px-4 py-3 text-[15px] font-semibold text-white hover:brightness-[.96] sm:w-auto">
             Go to the Arena
           </Link>
         )}
@@ -356,10 +356,10 @@ function Reveal({ id, onClose }: { id: bigint; onClose: () => void }) {
         )}
         {(revealed || failed) && (
           <div className="mt-4 grid grid-cols-2 gap-2 animate-in fade-in-0 delay-700 duration-500 fill-mode-both">
-            <Link href="/app/profile" className="rounded-[10px] border border-[#DCD5EC] bg-white p-3 text-center text-[15px] font-semibold text-[#1A1130] hover:bg-[#F7F5FB]">
+            <Link href="/profile" className="rounded-[10px] border border-[#DCD5EC] bg-white p-3 text-center text-[15px] font-semibold text-[#1A1130] hover:bg-[#F7F5FB]">
               View profile
             </Link>
-            <Link href="/app/create" className="rounded-[10px] bg-[#6E56E8] p-3 text-center text-[15px] font-semibold text-white hover:brightness-[.96]">
+            <Link href="/create" className="rounded-[10px] bg-[#6E56E8] p-3 text-center text-[15px] font-semibold text-white hover:brightness-[.96]">
               Make a call
             </Link>
           </div>

@@ -3,10 +3,10 @@
 import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
 import { preload } from "react-dom";
 import { AnimatePresence, motion, MotionConfig } from "motion/react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { ChevronDownIcon, ZapIcon } from "lucide-react";
+import { useQueryClient } from "@tanstack/react-query";
+import { ChevronDownIcon, XIcon, ZapIcon } from "lucide-react";
 import { toast } from "sonner";
-import { erc20Abi, formatUnits, parseEventLogs, zeroAddress, type Hex } from "viem";
+import { erc20Abi, formatUnits, parseEther, parseEventLogs, zeroAddress, type Hex } from "viem";
 import { useConfig, useReadContract, useWriteContract } from "wagmi";
 import { waitForTransactionReceipt } from "wagmi/actions";
 import { Button } from "@/components/ui/button";
@@ -18,7 +18,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { burned, cardQuery, cleanAmount, DEADLINES, duelAbi, feedAbi, MIN_LEAD, fmt, parseStake, payout, pot, shareKey, TARGET_DECIMALS, toUnits } from "./duel";
 import Link from "next/link";
 import { useRouter } from "nextjs-toploader/app";
-import { ipfs, nftAbi, useProfileChog, type Meta } from "@/features/profile/chogs";
+import { ipfs, useChogMeta, useProfileChog } from "@/features/profile/chogs";
+import { clipDare, DARE_IDEAS, dareBytes, lastWordAbi, LW_CHOG_FEE, LW_FEE, MAX_DARE } from "@/features/lastword/lastword";
+import { ChogPicker } from "./arena";
 import { ASSETS, Coin, type Asset } from "./coins";
 import { NETWORKS } from "./networks";
 import { ShareCard } from "./share-card";
@@ -31,10 +33,13 @@ const TOKENS = {
   CHOG: { label: "$CHOG", icon: "/chog-coin.avif", presets: [10, 100, 1000, 5000], fee: "Burned (5%)" },
 };
 type Token = keyof typeof TOKENS;
+// Two ways to play: real stakes into the ChogDuel escrow, or Last Word, where a flat fee buys a dare the loser's Chog wears.
+type Mode = "stakes" | "lastword";
 // The form reads like the call itself: what you think, what you put on it, then one look before locking.
 const STEPS = ["Your call", "Stake", "Review"];
+const LW_STEPS = ["Your call", "Dare", "Review"];
 // A blank form. Anything else is kept as a draft per wallet and network until the call is locked.
-const BLANK = { picked: "MON" as Asset, dir: "above" as "above" | "below", target: "", deadline: "Month end", custom: "", token: "MON" as Token, stakeText: "1", challenge: false, rival: "", step: 0 };
+const BLANK = { mode: "stakes" as Mode, picked: "MON" as Asset, dir: "above" as "above" | "below", target: "", deadline: "Month end", custom: "", token: "MON" as Token, lwToken: "CHOG" as Token, stakeText: "1", challenge: false, rival: "", chog: "", dare: "", step: 0 };
 type Draft = typeof BLANK;
 // A datetime-local value ("2026-10-23T14:00") for a timestamp, in the viewer's own time zone.
 const localInput = (ms: number) => new Date(ms - new Date(ms).getTimezoneOffset() * 60_000).toISOString().slice(0, 16);
@@ -46,20 +51,26 @@ const parseDraft = (raw: string | null): Draft | null => {
   if (!d || typeof d !== "object") return null;
   const s = (v: unknown, ok: (v: string) => boolean = () => true) => (typeof v === "string" && ok(v) ? v : undefined);
   return {
+    mode: d.mode === "lastword" ? "lastword" : "stakes",
     picked: (s(d.picked, (v) => Object.hasOwn(ASSETS, v)) ?? BLANK.picked) as Asset,
     dir: d.dir === "below" ? "below" : "above",
     target: cleanAmount(s(d.target) ?? "", TARGET_DECIMALS),
     deadline: s(d.deadline, (v) => Object.hasOwn(DEADLINES, v) || v === "Custom") ?? BLANK.deadline,
     custom: s(d.custom) ?? "",
     token: (s(d.token, (v) => Object.hasOwn(TOKENS, v)) ?? BLANK.token) as Token,
+    lwToken: (s(d.lwToken, (v) => Object.hasOwn(TOKENS, v)) ?? BLANK.lwToken) as Token,
     stakeText: cleanAmount(s(d.stakeText) ?? BLANK.stakeText, 18),
     challenge: d.challenge === true,
     rival: (s(d.rival) ?? "").replace(/\D/g, "").replace(/^0+/, ""),
+    chog: (s(d.chog) ?? "").replace(/\D/g, ""),
+    dare: s(d.dare) ?? "",
     step: typeof d.step === "number" && STEPS[d.step] ? d.step : 0,
   };
 };
 const noop = () => () => {};
 const skel = "block animate-pulse bg-[#F1EEFB] motion-reduce:animate-none";
+// The mode bar is already lavender, so its placeholders need a shade darker to show.
+const skelTint = "block animate-pulse bg-[#E3DCF6] motion-reduce:animate-none";
 // The old step leaves one side while the next enters from the other; d is 1 forward, -1 back.
 const slide = {
   enter: (d: number) => ({ x: `${d * 100}%`, opacity: 0 }),
@@ -67,7 +78,8 @@ const slide = {
   exit: (d: number) => ({ x: `${d * -100}%`, opacity: 0 }),
 };
 
-export function CreateCall() {
+// `preset` comes from the link: ?mode=stake|lastword picks the starting mode.
+export function CreateCall({ preset }: { preset?: { lastWord: boolean } }) {
   const w = useWallet();
   const config = useConfig();
   const queryClient = useQueryClient();
@@ -88,9 +100,22 @@ export function CreateCall() {
   const [custom, setCustom] = useState(BLANK.custom); // datetime-local value, used when deadline is "Custom"
   const [pickOpen, setPickOpen] = useState(false);
   const [token, setToken] = useState(BLANK.token);
+  const [lwToken, setLwToken] = useState(BLANK.lwToken); // Last Word's fee token; $CHOG by default (burned), MON goes to the treasury
   const [stakeText, setStakeText] = useState(BLANK.stakeText);
   const [challenge, setChallenge] = useState(BLANK.challenge); // open to any Chog holder, or only to one Chog's holder
   const [rival, setRival] = useState(BLANK.rival); // that Chog's id
+  const [chogPick, setChogPick] = useState(BLANK.chog); // the Chog the creator enters with; "" = their profile Chog
+  const [mode, setMode] = useState<Mode>(preset?.lastWord ? "lastword" : BLANK.mode);
+  // The mode rides the URL (?mode=stake | lastword), so the link opens the same game. The native history API, not the router:
+  // a router navigation would remount the form (the page keys it by its search params) and lose what was typed.
+  useEffect(() => {
+    const q = new URLSearchParams(location.search);
+    q.set("mode", mode === "lastword" ? "lastword" : "stake");
+    window.history.replaceState(null, "", `${location.pathname}?${q}`);
+  }, [mode]);
+  const lw = mode === "lastword";
+  const steps = lw ? LW_STEPS : STEPS;
+  const [dare, setDare] = useState(BLANK.dare); // Last Word: what the losing Chog wears
   const [busy, setBusy] = useState<string>();
   const [step, setStep] = useState(BLANK.step); // index into STEPS
   const [slideDir, setSlideDir] = useState(1); // 1 forward, -1 back: which way the steps slide
@@ -104,11 +129,11 @@ export function CreateCall() {
   if (draftKey && settled !== draftKey && !stored) setSettled(draftKey); // nothing to ask about: start saving
   const blocked = !!(gate || stored);
   const pickUp = (d: Draft) => {
-    setAsset(d.picked); setDir(d.dir); setTarget(d.target); setDeadline(d.deadline); setCustom(d.custom);
-    setToken(d.token); setStakeText(d.stakeText); setChallenge(d.challenge); setRival(d.rival);
+    setMode(d.mode); setDare(clipDare(d.dare)); setAsset(d.picked); setDir(d.dir); setTarget(d.target); setDeadline(d.deadline); setCustom(d.custom);
+    setToken(d.token); setLwToken(d.lwToken); setStakeText(d.stakeText); setChallenge(d.challenge); setRival(d.rival); setChogPick(d.chog);
     setSlideDir(1); setStep(d.step); setSettled(draftKey);
   };
-  const draftJson = JSON.stringify({ picked, dir, target, deadline, custom, token, stakeText, challenge, rival, step } satisfies Draft);
+  const draftJson = JSON.stringify({ mode, picked, dir, target, deadline, custom, token, lwToken, stakeText, challenge, rival, chog: chogPick, dare, step } satisfies Draft);
   useEffect(() => {
     if (!draftKey || settled !== draftKey) return;
     try {
@@ -122,9 +147,8 @@ export function CreateCall() {
   const pickToken = (k: Token) => { setToken(k); setStakeText(String(TOKENS[k].presets[0])); };
 
   const { chain, chog, duel } = w.net;
-  // The share card shows the profile Chog unless another is picked here; the pick and theme ride the duel link as ?chog=&theme=.
+  // The Chog the creator enters with (the profile Chog unless another is picked): the duel's result goes on its record, and it's the one on the share card.
   const { chogs: owned, chog: profileChog, loading: chogsLoading } = useProfileChog(w.address, chain.id);
-  const [cardChog, setCardChog] = useState<string>();
   const [dark, setDark] = useState(false);
   // The card is drawn at its 1200px OG size and scaled to the column.
   const [scale, setScale] = useState(0);
@@ -134,25 +158,20 @@ export function CreateCall() {
     ro.observe(el);
     return () => ro.disconnect();
   }, []);
-  const mine = owned.find((c) => String(c.id) === cardChog) ?? profileChog;
-  // A challenge puts the called-out Chog on the card's right; same cache key as useOwnedChogs.
-  const rivalUri = useReadContract({
-    address: w.net.nft, abi: nftAbi, functionName: "tokenURI", args: [BigInt(rival || 0)], chainId: chain.id,
-    // An unminted id reverts every time, so fail at once instead of retrying for seconds with Continue enabled.
-    query: { enabled: challenge && !!rival && !!w.net.nft, retry: false },
-  });
-  const rivalMeta = useQuery({
-    queryKey: ["chog-meta", rival, rivalUri.data],
-    queryFn: async (): Promise<Meta> => (await fetch(ipfs(rivalUri.data!))).json(),
-    enabled: challenge && !!rivalUri.data,
-    staleTime: Infinity,
-  });
+  const mine = owned.find((c) => String(c.id) === chogPick) ?? profileChog;
+  // A challenge puts the called-out Chog on the card's right. An unminted id fails at once, so Continue isn't enabled for seconds.
+  const { uri: rivalUri, meta: rivalMeta } = useChogMeta(challenge && rival ? BigInt(rival) : undefined, chain.id);
   const previewLoading = checking || (w.ready && (chogsLoading || !!mine?.pending));
   const stakeUnits = toUnits(stakeText, 18); // MON and $CHOG both have 18 decimals
   const targetUnits = toUnits(target, TARGET_DECIMALS);
+  // $CHOG is pulled by the contract this mode pays: the escrow takes the stake, Last Word the flat fee.
+  const payToken = lw ? lwToken : token;
+  const spender = lw ? w.net.lastWord : duel;
+  const chogNeeded = lw ? parseEther(String(LW_CHOG_FEE)) : stakeUnits;
+  const lwFeeText = lwToken === "MON" ? `${LW_FEE} MON` : `${LW_CHOG_FEE} $CHOG`;
   const allowance = useReadContract({
-    address: chog, abi: erc20Abi, functionName: "allowance", args: [w.address!, duel!], chainId: chain.id,
-    query: { enabled: token === "CHOG" && !!chog && !!duel && !!w.address },
+    address: chog, abi: erc20Abi, functionName: "allowance", args: [w.address!, spender!], chainId: chain.id,
+    query: { enabled: payToken === "CHOG" && !!chog && !!spender && !!w.address },
   });
   // The live price from mainnet Chainlink on both networks: testnet duels settle on FeedMirror copies of it, which hold only settled rounds.
   const latest = useReadContract({
@@ -160,7 +179,7 @@ export function CreateCall() {
     query: { refetchInterval: 15_000 },
   });
   const price = latest.data && Number(formatUnits(latest.data[1], TARGET_DECIMALS));
-  const needsApproval = token === "CHOG" && (allowance.data ?? BigInt(0)) < stakeUnits;
+  const needsApproval = payToken === "CHOG" && (allowance.data ?? BigInt(0)) < chogNeeded;
   const short = balance != null && stake > balance;
   // Called only at lock time: presets count from the click, and reading the clock during render breaks prerendering.
   const deadlineAt = () => deadline === "Custom" ? Math.floor(new Date(custom).getTime() / 1000) : DEADLINES[deadline].at();
@@ -170,10 +189,15 @@ export function CreateCall() {
   const callProblem = deadline === "Custom" && !custom ? "Pick a deadline" : !(targetUnits > BigInt(0)) ? "Enter a target price" : null;
   // The contract rejects an unminted Chog or one the creator holds; catch both before locking.
   const rivalProblem = !challenge ? null : !rival ? "Enter a Chog number" : rivalUri.isError ? `No Chog #${rival}` : owned.some((c) => String(c.id) === rival) ? "That's your own Chog" : !rivalUri.data ? "Finding Chog…" : null;
-  const stakeProblem = rivalProblem ?? (!(stakeUnits > BigInt(0)) ? "Enter a stake" : short ? `Not enough ${t.label}` : null);
-  const problem = !duel ? "Duels aren't live on this network yet" : callProblem ?? stakeProblem;
+  const dareProblem = !dare.trim() ? "Write the dare" : dareBytes(dare.trim()) > MAX_DARE ? "Dare is too long"
+    : lwToken === "MON" ? (w.monBalance != null && w.monBalance < LW_FEE ? "Not enough MON" : null)
+    : w.chogBalance != null && w.chogBalance < LW_CHOG_FEE ? "Not enough $CHOG" : null;
+  // The middle step: the stake for real stakes, the dare for Last Word.
+  const stakeProblem = rivalProblem ?? (lw ? dareProblem : !(stakeUnits > BigInt(0)) ? "Enter a stake" : short ? `Not enough ${t.label}` : null);
+  const live = lw ? w.net.lastWord : duel;
+  const problem = !live ? `${lw ? "Last Word isn't" : "Duels aren't"} live on this network yet` : chogsLoading ? "Finding your Chogs…" : !mine ? "You need a Chog" : callProblem ?? stakeProblem;
   const stepProblem = [callProblem, stakeProblem, problem][step];
-  const lockLabel = busy ?? problem ?? `${needsApproval ? "Approve & lock" : "Lock"} ${fmt(stake)} ${t.label} & get link`;
+  const lockLabel = busy ?? problem ?? (lw ? `${needsApproval ? "Approve & throw down" : "Throw down"} · ${lwFeeText} & get link` : `${needsApproval ? "Approve & lock" : "Lock"} ${fmt(stake)} ${t.label} & get link`);
   const claim = `${asset} will be ${dir} $${target || "…"} ${when}.`;
   // A custom deadline that's already too close is caught here rather than after the stake is picked.
   const advance = () => {
@@ -181,12 +205,43 @@ export function CreateCall() {
     go(step + 1);
   };
 
+  // Last Word: the flat fee in MON (one transaction) or $CHOG (approve first if needed); the dare goes on-chain with the call.
+  const lockLastWord = async (at: number, rivalId: bigint) => {
+    const lastWord = w.net.lastWord;
+    if (!lastWord || (lwToken === "CHOG" && !chog)) return;
+    try {
+      if (needsApproval) {
+        setBusy("Confirm in wallet…");
+        const approval = await writeContractAsync({ address: chog!, abi: erc20Abi, functionName: "approve", args: [lastWord, chogNeeded], chainId: chain.id });
+        setBusy("Approving…");
+        if ((await waitForTransactionReceipt(config, { hash: approval, chainId: chain.id })).status !== "success") throw new Error("Approval reverted");
+      }
+      setBusy("Confirm in wallet…");
+      const hash = await writeContractAsync({
+        address: lastWord, abi: lastWordAbi, functionName: "create", chainId: chain.id, value: lwToken === "MON" ? parseEther(String(LW_FEE)) : undefined,
+        args: [w.net.feeds[asset]!, dir === "above", targetUnits, BigInt(at), rivalId, mine!.id, dare.trim(), lwToken === "MON" ? zeroAddress : chog!],
+      });
+      setBusy("Locking…");
+      const receipt = await waitForTransactionReceipt(config, { hash, chainId: chain.id });
+      if (receipt.status !== "success") throw new Error("Transaction reverted");
+      const [created] = parseEventLogs({ abi: lastWordAbi, eventName: "DuelCreated", logs: receipt.logs });
+      queryClient.invalidateQueries();
+      try { if (draftKey) localStorage.removeItem(draftKey); } catch {}
+      // The page's link is what gets shared (Copy link), so it carries the card theme the creator picked.
+      router.push(`/last-word/${created.args.id}${dark ? "?theme=dark" : ""}`);
+    } catch (e) {
+      toast.error((e as { shortMessage?: string }).shortMessage ?? (e as Error).message ?? "Transaction failed");
+    } finally {
+      setBusy(undefined);
+    }
+  };
   const lock = async () => {
-    if (!duel || (token === "CHOG" && !chog)) return;
     const at = deadlineAt();
     if (!(at >= Date.now() / 1000 + MIN_LEAD)) return void toast.error(`Deadline must be at least ${MIN_LEAD / 60} min out`);
-    const tokenAddr = token === "MON" ? zeroAddress : chog!;
     const rivalId = challenge ? BigInt(rival) : BigInt(0);
+    if (lw) return lockLastWord(at, rivalId);
+    if (!duel || (token === "CHOG" && !chog)) return;
+    const tokenAddr = token === "MON" ? zeroAddress : chog!;
     const now = latest.data?.[1];
     // Everything on the share card is known before the tx, so /og starts drawing it while the wallet confirms; the duel page asks for the same URL.
     const pick = new URLSearchParams({ ...(mine && { chog: String(mine.id) }), ...(dark && { theme: "dark" }) });
@@ -209,7 +264,7 @@ export function CreateCall() {
           address: duel,
           abi: duelAbi,
           functionName: "create",
-          args: [tokenAddr, stakeUnits, w.net.feeds[asset]!, dir === "above", targetUnits, BigInt(at), rivalId],
+          args: [tokenAddr, stakeUnits, w.net.feeds[asset]!, dir === "above", targetUnits, BigInt(at), rivalId, mine!.id],
           value: token === "MON" ? stakeUnits : undefined,
           chainId: chain.id,
         }),
@@ -217,9 +272,9 @@ export function CreateCall() {
       const [created] = parseEventLogs({ abi: duelAbi, eventName: "DuelCreated", logs: receipt.logs });
       queryClient.invalidateQueries();
       try { if (draftKey) localStorage.removeItem(draftKey); } catch {}
-      // The duel page is where the creator shares the link; it adds this card pick and price to the shared link, keeping the page's own URL clean.
-      try { localStorage.setItem(shareKey(chain.id, created.args.id), JSON.stringify({ chog: mine && String(mine.id), dark, now: now?.toString() })); } catch {}
-      router.push(`/app/duels/${created.args.id}`);
+      // The duel page is where the creator shares the link; it adds this theme and price to the shared link, keeping the page's own URL clean.
+      try { localStorage.setItem(shareKey(chain.id, created.args.id), JSON.stringify({ dark, now: now?.toString() })); } catch {}
+      router.push(`/duels/${created.args.id}`);
     } catch (e) {
       toast.error((e as { shortMessage?: string }).shortMessage ?? (e as Error).message ?? "Transaction failed");
     } finally {
@@ -231,11 +286,21 @@ export function CreateCall() {
   return (
     <>
       <h1 className="m-0 text-[32px] leading-[1.1] font-semibold tracking-[-.03em]">Make a call</h1>
-      <p className="mt-1.5 text-[15px] text-[#6B6185]">Your stake is held in escrow until someone accepts or the deadline passes.</p>
-      <div className="mt-7 grid grid-cols-1 items-start gap-10 min-[901px]:grid-cols-[minmax(0,1fr)_440px]">
+      <p className="mt-1.5 text-[15px] text-[#6B6185]">
+        {lw ? `No pot. Each side pays ${LW_CHOG_FEE} $CHOG (burned) or ${LW_FEE} MON to play, and the loser's Chog wears your line.` : "Both sides stake the same. The winner takes the pot, minus a 5% fee."}
+      </p>
+      <div className="mt-6 grid grid-cols-1 items-start gap-10 min-[901px]:grid-cols-[minmax(0,1fr)_440px]">
         <div>
           {checking ? (
             <div aria-busy="true" aria-label="Loading" className="overflow-hidden rounded-2xl border border-[#ECE8F3] bg-white">
+              <div className="flex items-center gap-3 border-b border-[#ECE8F3] bg-[#F0ECFB] px-5 py-3">
+                <span className={`size-12 shrink-0 rounded-xl ${skelTint}`} />
+                <div className="flex flex-col gap-1.5">
+                  <span className={`h-2.5 w-20 rounded ${skelTint}`} />
+                  <span className={`h-4 w-56 max-w-[40vw] rounded ${skelTint}`} />
+                </div>
+                <span className={`ml-auto h-10 w-[190px] rounded-[10px] ${skelTint}`} />
+              </div>
               <div className="flex items-center gap-3 border-b border-[#ECE8F3] px-6 py-4">
                 {STEPS.map((s, i) => (
                   <div key={s} className="flex flex-1 items-center gap-3 last:flex-none">
@@ -271,26 +336,27 @@ export function CreateCall() {
                   ) : stored && (
                     <>
                       <p className="mt-4 text-[17px] font-semibold">Pick up where you left off?</p>
-                      <p className="mt-1.5 text-[14px] leading-normal text-[#6B6185]">
-                        You were calling {stored.picked} {stored.dir} ${stored.target || "…"}, staking {stored.stakeText || "0"} {TOKENS[stored.token].label}.
+                      <p className="mt-1.5 text-[14px] leading-normal text-[#6B6185] wrap-anywhere">
+                        You were calling {stored.picked} {stored.dir} ${stored.target || "…"}, {stored.mode === "lastword" ? `daring “${stored.dare || "…"}”` : `staking ${stored.stakeText || "0"} ${TOKENS[stored.token].label}`}.
                       </p>
                       <Button variant="plain" onClick={() => pickUp(stored)} className="mt-5 h-auto w-full rounded-[11px] bg-[#6E56E8] p-3 text-[15px] font-semibold text-white">Continue</Button>
-                      <Button variant="plain" onClick={() => pickUp(BLANK)} className="mt-2 h-auto px-3 py-1.5 text-[14px] font-medium text-[#8E85A3] hover:text-[#1A1130]">Start new</Button>
+                      <Button variant="plain" onClick={() => pickUp({ ...BLANK, mode })} className="mt-2 h-auto px-3 py-1.5 text-[14px] font-medium text-[#8E85A3] hover:text-[#1A1130]">Start new</Button>
                     </>
                   )}
                 </div>
               </div>
             )}
             <div inert={blocked} aria-hidden={blocked} className={`transition-[filter] ${blocked ? "pointer-events-none blur-[3px] select-none" : ""}`}>
+              <ModeBar mode={mode} onPick={(m) => { if (m !== mode) { setMode(m); go(0); } }} disabled={!!busy} />
               <ol className="m-0 flex list-none items-center gap-3 border-b border-[#ECE8F3] px-6 py-4">
-                {STEPS.map((s, i) => (
+                {steps.map((s, i) => (
                   <li key={s} className="flex flex-1 items-center gap-3 last:flex-none">
                     <button type="button" disabled={i >= step || !!busy} onClick={() => go(i)} aria-current={i === step ? "step" : undefined}
                       className="flex cursor-pointer items-center gap-2 text-[13px] font-medium whitespace-nowrap disabled:cursor-default">
                       <span className={`grid size-6 place-items-center rounded-full font-mono text-[12px] ${i <= step ? "bg-[#6E56E8] text-white" : "bg-[#F4F1FA] text-[#8E85A3]"}`}>{i < step ? "✓" : i + 1}</span>
                       <span className={i === step ? "text-[#1A1130]" : "text-[#8E85A3]"}>{s}</span>
                     </button>
-                    {i < STEPS.length - 1 && <span className="h-px flex-1 bg-[#ECE8F3]" />}
+                    {i < steps.length - 1 && <span className="h-px flex-1 bg-[#ECE8F3]" />}
                   </li>
                 ))}
               </ol>
@@ -368,8 +434,40 @@ export function CreateCall() {
                   </div>
                 </>
               )}
+              {step === 1 && lw && (
+                <div className="flex flex-col gap-3 text-[16px] text-[#6B6185]">
+                  <div className="flex items-center justify-between gap-3">
+                    <label htmlFor="dare" className="text-[18px] text-[#1A1130]">Loser&apos;s Chog says</label>
+                    <span className={`font-mono text-[16px] ${dareBytes(dare.trim()) > MAX_DARE ? "text-[#C43A52]" : "text-[#8E85A3]"}`}>{dareBytes(dare.trim())}/{MAX_DARE}</span>
+                  </div>
+                  <Input id="dare" value={dare} placeholder="I bought the top." onChange={(e) => setDare(clipDare(e.target.value))}
+                    className="h-auto rounded-[14px] border-[#DCD5EC] bg-white px-[18px] py-4 text-[20px] font-semibold text-[#1A1130] md:text-[20px] focus-visible:border-[#C9BFE3] focus-visible:ring-0" />
+                  <span className="mt-0.5 font-mono text-[12px] tracking-[.16em] text-[#8E85A3]">OR TAP ONE</span>
+                  <div className="-mt-1 flex flex-wrap gap-1.5">
+                    {DARE_IDEAS.map((idea) => (
+                      <Button key={idea} variant="plain" onClick={() => setDare(idea)} className="h-auto rounded-full bg-[#F4F0FF] px-4 py-2 text-[16px] font-normal text-[#5024D9] hover:bg-[#EAE2FF]">
+                        {idea}
+                      </Button>
+                    ))}
+                  </div>
+                  <p className="m-0 mt-0.5 leading-7">Whoever loses wears it until their Chog wins a Last Word duel back.<br />Taking the duel means agreeing to it.</p>
+                  <div className="flex flex-col gap-1.5 text-[13px] text-[#6B6185]">
+                    Pay to play in
+                    <div className="grid grid-cols-2 gap-1.5 rounded-[10px] bg-[#F4F1FA] p-1">
+                      {(["CHOG", "MON"] as Token[]).map((k) => (
+                        <Button key={k} variant="plain" onClick={() => setLwToken(k)} style={seg(lwToken === k)} className="h-auto gap-2 rounded-[7px] p-2.5 text-[14px] font-semibold">
+                          <img alt="" src={TOKENS[k].icon} className="size-5 rounded-full" />
+                          {k === "MON" ? `${LW_FEE} MON` : `${LW_CHOG_FEE} $CHOG`}
+                        </Button>
+                      ))}
+                    </div>
+                    <span>{lwToken === "MON" ? "Each side pays the same; both fees go to the treasury." : "Each side pays the same; both fees are burned."}</span>
+                  </div>
+                </div>
+              )}
               {step === 1 && (
                 <>
+                  {!lw && <>
                   <div className="flex flex-col gap-1.5 text-[13px] text-[#6B6185]">
                     Stake in
                     <div className="grid grid-cols-2 gap-1.5 rounded-[10px] bg-[#F4F1FA] p-1">
@@ -394,7 +492,7 @@ export function CreateCall() {
                       <p className="m-0 text-[13px] text-[#C43A52]">
                         You have {fmt(balance)} {t.label}.{" "}
                         {w.isTestnet ? (
-                          <Link href="/app/faucet" className="font-semibold text-[#6E56E8] underline-offset-2 hover:underline">Get more from the faucet</Link>
+                          <Link href="/faucet" className="font-semibold text-[#6E56E8] underline-offset-2 hover:underline">Get more from the faucet</Link>
                         ) : token === "CHOG" && (
                           <a href={w.net.getChog} target="_blank" rel="noopener noreferrer" className="font-semibold text-[#6E56E8] underline-offset-2 hover:underline">Buy on nad.fun</a>
                         )}
@@ -408,6 +506,7 @@ export function CreateCall() {
                       ))}
                     </div>
                   </div>
+                  </>}
                   <div className="flex flex-col gap-1.5 text-[13px] text-[#6B6185]">
                     Who can take it
                     <div className="grid grid-cols-2 gap-1.5 rounded-[10px] bg-[#F4F1FA] p-1">
@@ -441,14 +540,26 @@ export function CreateCall() {
                     <p className="m-0 font-mono text-[12px] font-medium text-[#8E85A3]">YOUR CALL</p>
                     <p className="mt-1.5 mb-0 text-[20px] leading-snug font-semibold tracking-[-.01em] text-[#1A1130] text-pretty">{claim}</p>
                   </div>
+                  {lw ? (
+                  <div className="flex flex-col gap-2.5 rounded-xl bg-[#FAF9FC] p-4 text-[14px]">
+                    <div className="flex justify-between gap-4"><span className="shrink-0 text-[#6B6185]">Loser&apos;s Chog says</span><span className="text-right font-medium">“{dare.trim()}”</span></div>
+                    <div className="flex justify-between"><span className="text-[#6B6185]">Your Chog</span><span className="font-mono">{mine ? `#${mine.id}` : "—"}</span></div>
+                    <div className="flex justify-between"><span className="text-[#6B6185]">Who can take it</span><span className="font-mono">{challenge ? `Chog #${rival}` : "Any Chog"}</span></div>
+                    <div className="flex justify-between"><span className="text-[#6B6185]">Entry, each side</span><span className="font-mono">{lwFeeText}{lwToken === "CHOG" ? " · burned" : ""}</span></div>
+                    <div className="flex justify-between"><span className="text-[#6B6185]">Settles</span><span className="font-mono">{when}</span></div>
+                    <div className="flex justify-between border-t border-[#ECE8F3] pt-2.5 font-semibold"><span>Winner gets</span><span className="text-[#6E56E8]">The last word</span></div>
+                  </div>
+                  ) : (
                   <div className="flex flex-col gap-2.5 rounded-xl bg-[#FAF9FC] p-4 text-[14px]">
                     <div className="flex justify-between"><span className="text-[#6B6185]">Your stake</span><span className="font-mono">{fmt(stake)} {t.label}</span></div>
+                    <div className="flex justify-between"><span className="text-[#6B6185]">Your Chog</span><span className="font-mono">{mine ? `#${mine.id}` : "—"}</span></div>
                     <div className="flex justify-between"><span className="text-[#6B6185]">Who can take it</span><span className="font-mono">{challenge ? `Chog #${rival}` : "Any Chog"}</span></div>
                     <div className="flex justify-between"><span className="text-[#6B6185]">Pot if accepted</span><span className="font-mono">{fmt(pot(stake))} {t.label}</span></div>
                     <div className="flex justify-between"><span className="text-[#6B6185]">{t.fee}</span><span className="font-mono text-[#C43A52]">−{fmt(burned(stake))} {t.label}</span></div>
                     <div className="flex justify-between"><span className="text-[#6B6185]">Settles</span><span className="font-mono">{when}</span></div>
                     <div className="flex justify-between border-t border-[#ECE8F3] pt-2.5 font-semibold"><span>You receive if right</span><span className="font-mono text-[#6E56E8]">{fmt(payout(stake))} {t.label}</span></div>
                   </div>
+                  )}
                 </>
               )}
               </motion.div>
@@ -468,7 +579,14 @@ export function CreateCall() {
           )}
         </div>
         <div className="sticky top-24 flex flex-col gap-3">
-          <div className="font-mono text-[12px] font-medium text-[#8E85A3]">SHARE CARD PREVIEW</div>
+          {!previewLoading && owned.length > 0 && (
+            <>
+              <div className="flex justify-between font-mono text-[12px] font-medium text-[#8E85A3]">PICK YOUR CHOG{mine && <span className="text-[#1A1130]">{mine.meta?.name ?? `Chog #${mine.id}`}</span>}</div>
+              <ChogPicker chogs={owned} value={mine?.id} onPick={(id) => setChogPick(String(id))} />
+              <p className="m-0 text-[13px] text-[#6B6185]">It enters the duel with you. The win, loss or tie goes on its record.</p>
+            </>
+          )}
+          <div className={`font-mono text-[12px] font-medium text-[#8E85A3] ${!previewLoading && owned.length > 0 ? "mt-2" : ""}`}>SHARE CARD PREVIEW</div>
           {previewLoading ? (
             <span aria-busy="true" aria-label="Loading preview" className={`aspect-[40/21] rounded-md ${skel}`} />
           ) : (
@@ -476,8 +594,9 @@ export function CreateCall() {
             <div ref={fit} role="img" aria-label={claim} className="aspect-[40/21] overflow-hidden rounded-md border border-[#ECE8F3]">
               <div style={{ width: 1200, transform: `scale(${scale})`, transformOrigin: "0 0" }}>
                 <ShareCard
+                  dare={lw ? dare.trim() : undefined}
                   asset={asset} now={price != null ? `$${fmt(price)}` : undefined} call={`${dir} $${target || "…"}`} when={when}
-                  stake={`${fmt(stake)} ${t.label}`} win={fmt(payout(stake))} cta={challenge && rival ? `#${rival}, accept →` : "Seat open →"}
+                  stake={`${fmt(stake)} ${t.label}`} win={fmt(payout(stake))} cta={challenge && rival ? `#${rival}, accept →` : lw ? "Take the dare →" : "Fade me →"}
                   art={mine?.meta ? ipfs(mine.meta.image) : "/chog-logo.png"} chog={mine && String(mine.id)} dark={dark}
                   rival={challenge && rival ? { id: rival, art: rivalMeta.data ? ipfs(rivalMeta.data.image) : rivalUri.isError || rivalMeta.isError ? "/chog-logo.png" : undefined } : undefined}
                 />
@@ -489,27 +608,33 @@ export function CreateCall() {
             </div>
           </>
           )}
-          {!previewLoading && owned.length > 1 && (
-            <>
-              <div className="mt-2 font-mono text-[12px] font-medium text-[#8E85A3]">CHOG ON THE CARD</div>
-              <div className="flex flex-wrap gap-2">
-                {owned.map((c) => (
-                  <button
-                    key={String(c.id)}
-                    type="button"
-                    aria-label={c.meta?.name ?? `Chog #${c.id}`}
-                    aria-pressed={c.id === mine?.id}
-                    onClick={() => setCardChog(String(c.id))}
-                    className={`size-12 cursor-pointer overflow-hidden rounded-[10px] border-2 bg-[#F1EEFB] outline-none focus-visible:ring-3 focus-visible:ring-[#6E56E8]/40 ${c.id === mine?.id ? "border-[#6E56E8]" : "border-transparent hover:border-[#DCD5EC]"}`}
-                  >
-                    {c.meta && <img alt="" src={ipfs(c.meta.image)} className="size-full object-cover" />}
-                  </button>
-                ))}
-              </div>
-            </>
-          )}
         </div>
       </div>
     </>
+  );
+}
+
+// The top of the form card: which game this call is, and the switch between the two.
+function ModeBar({ mode, onPick, disabled }: { mode: Mode; onPick: (m: Mode) => void; disabled: boolean }) {
+  const lw = mode === "lastword";
+  return (
+    <div className="flex flex-wrap items-center gap-3 border-b border-[#ECE8F3] bg-[#F0ECFB] px-5 py-3 text-[#1A1130]">
+      <span aria-hidden="true" className="relative size-12 shrink-0 overflow-hidden rounded-xl ring-1 ring-black/5">
+        <img src={lw ? "/chog-1044.png" : "/chog-logo.png"} alt="" className="size-full object-cover" />
+        {lw && <span className="absolute top-[54%] left-[61%] grid size-3.5 place-items-center rounded-sm bg-[#FFE5ED] text-[#C43A52]"><XIcon className="size-3.5" strokeWidth={3.5} /></span>}
+      </span>
+      <div className="min-w-0 leading-tight">
+        <p className="m-0 font-mono text-[11px] font-medium tracking-[.14em] text-[#8E85A3]">GAME MODE</p>
+        <p className="m-0 mt-0.5 text-[16px] font-semibold">{lw ? "Last Word · Loser wears your line" : "Real stakes · Winner takes the pot"}</p>
+      </div>
+      <div role="radiogroup" aria-label="Game mode" className="ml-auto grid grid-cols-2 gap-1 rounded-[10px] bg-[#E3DCF6] p-1">
+        {(["stakes", "lastword"] as const).map((m) => (
+          <button key={m} type="button" role="radio" aria-checked={mode === m} disabled={disabled} onClick={() => onPick(m)}
+            className={`cursor-pointer rounded-[7px] px-3 py-1.5 text-[14px] font-semibold whitespace-nowrap disabled:cursor-default ${mode === m ? "bg-[#6E56E8] text-white shadow-[0_2px_8px_rgba(110,86,232,.35)]" : "text-[#8E85A3] hover:bg-white/70 hover:text-[#1A1130]"}`}>
+            {m === "lastword" ? "Last Word" : "Real stakes"}
+          </button>
+        ))}
+      </div>
+    </div>
   );
 }

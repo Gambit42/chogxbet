@@ -80,7 +80,7 @@ export function StepAction({ action, quiet, className = "" }: { action: Action; 
 }
 
 // Pages that already walk the user through these steps themselves.
-const HIDDEN = ["/app/faucet", "/app/create"];
+const HIDDEN = ["/faucet", "/create"];
 
 /** Checklist above every app page until a connected wallet can duel. Logged-out visitors get a Connect wallet button instead. */
 export function Onboarding() {

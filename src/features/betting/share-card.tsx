@@ -4,7 +4,7 @@ import { ASSETS, type Asset } from "./coins";
 // The duel share card at its 1200×630 OG size. Inline styles only, so app/og (Satori) and the create-call preview draw the same card.
 // An open call shows the creator's Chog; a challenge (`rival`) puts the called-out Chog opposite it.
 export type Card = {
-  asset: string; now?: string; call: string; when: string; stake: string; win: string; cta: string;
+  asset: string; now?: string; call: string; when: string; stake: string; win: string; cta: string; dare?: string;
   art: string; chog?: string; rival?: { id: string; art?: string }; dark?: boolean; // no rival art: still loading (preview only)
 };
 
@@ -18,8 +18,9 @@ const mono = "Geist Mono, var(--font-geist-mono)";
 
 export function ShareCard(card: Card) {
   if (card.rival) return <Callout {...card} rival={card.rival} />;
-  const { asset, now, call, when, stake, win, cta, art, chog, dark } = card;
+  const { asset, now, call, when, stake, win, cta, art, chog, dark, dare } = card;
   const t = dark ? THEMES.dark : THEMES.light;
+  const pt = THEMES.light; // the stake panel stays light in dark mode too, so the purple reads against it
   const coin = Object.hasOwn(ASSETS, asset) ? ASSETS[asset as Asset] : undefined;
   const words = `${asset} will be ${call} ${when}.`.split(" ");
   const hi = call.split(" ").length; // the call's words sit right after "<asset> will be"
@@ -39,10 +40,14 @@ export function ShareCard(card: Card) {
           {words.map((w, i) => <span key={i} style={{ color: i >= 3 && i < 3 + hi ? t.hi : t.fg }}>{w}</span>)}
         </div>
         {/* Sized so the CTA fits "Calling out #1969" (Chog ids top out at 4 digits). */}
-        <div style={{ display: "flex", alignItems: "center", marginTop: "auto", padding: "16px 12px 16px 24px", borderRadius: 20, background: t.panel }}>
-          {[["STAKE", stake, t.fg], ["WINNER", win, t.hi]].map(([k, v, color]) => (
+        <div style={{ display: "flex", alignItems: "center", marginTop: "auto", padding: "16px 12px 16px 24px", borderRadius: 20, background: pt.panel }}>
+          {dare !== undefined ? <div style={{ display: "flex", flexDirection: "column", flex: 1, minWidth: 0, marginRight: 16 }}>
+            <span style={{ ...label, color: pt.muted }}>LOSER&apos;S CHOG SAYS</span>
+            <span style={{ marginTop: 8, fontSize: 30, lineHeight: 1.25, overflowWrap: "anywhere", color: pt.hi }}>{dare ? `“${dare}”` : "Your dare goes here…"}</span>
+          </div>
+          : [["STAKE", stake, pt.fg], ["WINNER", win, pt.hi]].map(([k, v, color]) => (
             <div key={k} style={{ display: "flex", flexDirection: "column", minWidth: 120, marginRight: 24 }}>
-              <span style={label}>{k}</span>
+              <span style={{ ...label, color: pt.muted }}>{k}</span>
               <span style={{ ...label, marginTop: 8, fontSize: 28, letterSpacing: 0, color, whiteSpace: "nowrap" }}>{v}</span>
             </div>
           ))}
@@ -58,7 +63,7 @@ export function ShareCard(card: Card) {
 }
 
 // A challenge: the creator's Chog on the left, the called-out Chog on the right, the call between them.
-function Callout({ asset, call, when, stake, win, cta, art, chog, rival, dark }: Card & { rival: { id: string; art?: string } }) {
+function Callout({ asset, call, when, stake, win, cta, art, chog, rival, dark, dare }: Card & { rival: { id: string; art?: string } }) {
   const t = dark ? THEMES.dark : THEMES.light;
   const words = `${asset} ${call} ${when}.`.split(" ");
   const hi = call.split(" ").length; // the target price, the call's last word
@@ -80,7 +85,11 @@ function Callout({ asset, call, when, stake, win, cta, art, chog, rival, dark }:
         <div style={{ display: "flex", flexWrap: "wrap", justifyContent: "center", columnGap: Math.round(size * 0.26), marginTop: 18, fontSize: size, lineHeight: 1.1, letterSpacing: -1.5 }}>
           {words.map((w, i) => <span key={i} style={{ color: i === hi ? t.hi : t.fg }}>{w}</span>)}
         </div>
-        <span style={{ ...label, marginTop: "auto", letterSpacing: 1 }}>{`${stake} EACH · WINNER ${win}`.toUpperCase()}</span>
+        {dare !== undefined ? <div style={{ display: "flex", flexDirection: "column", alignSelf: "stretch", marginTop: "auto", padding: "18px 24px", borderRadius: 16, background: t.panel }}>
+            <span style={{ ...label, fontSize: 18 }}>LOSER&apos;S CHOG SAYS</span>
+            <span style={{ marginTop: 8, color: t.hi, fontSize: 28, lineHeight: 1.25, overflowWrap: "anywhere" }}>{dare ? `“${dare}”` : "Your dare goes here…"}</span>
+          </div>
+          : <span style={{ ...label, marginTop: "auto", letterSpacing: 1 }}>{`${stake} EACH · WINNER ${win}`.toUpperCase()}</span>}
         <span style={{ display: "flex", justifyContent: "center", alignSelf: "stretch", marginTop: 18, padding: "22px 24px", borderRadius: 16, background: t.btn, color: "#fff", fontSize: 28, whiteSpace: "nowrap" }}>{cta}</span>
       </div>
       <div style={{ display: "flex", position: "relative", width: 300, flexShrink: 0, border: `6px solid ${t.hi}`, background: t.panel }}>
