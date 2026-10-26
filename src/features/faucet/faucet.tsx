@@ -12,7 +12,7 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { NETWORKS } from "@/features/betting/networks";
 import { useWallet, type AppWallet } from "@/features/betting/wallet";
-import { ipfs, nftAbi, useChogAvatar, type Meta } from "@/features/profile/chogs";
+import { fetchMeta, ipfs, nftAbi, useChogAvatar, type Meta } from "@/features/profile/chogs";
 
 const balanceOf = "function balanceOf(address) view returns (uint256)";
 // Both mock contracts cap mints per wallet (contracts/src); `minted` is how much of the cap is used.
@@ -313,7 +313,7 @@ function Reveal({ id, onClose }: { id: bigint; onClose: () => void }) {
   const uri = useReadContract({ address: nft, abi: nftAbi, functionName: "tokenURI", args: [id], chainId: chain.id });
   const meta = useQuery({
     queryKey: ["chog-meta", uri.data],
-    queryFn: async (): Promise<Meta> => (await fetch(ipfs(uri.data!))).json(),
+    queryFn: async (): Promise<Meta> => fetchMeta(uri.data!),
     enabled: !!uri.data,
     staleTime: Infinity,
   });

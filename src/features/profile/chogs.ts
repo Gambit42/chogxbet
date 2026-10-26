@@ -4,9 +4,9 @@ import { useSyncExternalStore } from "react";
 import type { Address } from "viem";
 import { useReadContract, useReadContracts } from "wagmi";
 import { networkOf } from "@/features/betting/networks";
-import { ipfs, nftAbi, type Meta } from "./nft";
+import { fetchMeta, ipfs, nftAbi, type Meta } from "./nft";
 
-export { ipfs, nftAbi, type Meta };
+export { fetchMeta, ipfs, nftAbi, type Meta };
 
 /** `pending` stays true until the metadata loads or fails, so callers can hold a placeholder. */
 export type Owned = { id: bigint; meta?: Meta; pending: boolean };
@@ -41,7 +41,7 @@ export function useOwnedChogs(owner: Address | undefined, chainId: number) {
       return {
         // The id keeps keys unique while the URIs are still loading (all undefined).
         queryKey: ["chog-meta", String(id), uri],
-        queryFn: async (): Promise<Meta> => (await fetch(ipfs(uri!))).json(),
+        queryFn: async (): Promise<Meta> => fetchMeta(uri!),
         enabled: !!uri,
         staleTime: Infinity,
       };
@@ -58,7 +58,7 @@ export function useChogMeta(id: bigint | undefined, chainId: number) {
   const uri = useReadContract({ address: nft, abi: nftAbi, functionName: "tokenURI", args: [id ?? BigInt(0)], chainId, query: { enabled: !!id && !!nft, retry: false } });
   const meta = useQuery({
     queryKey: ["chog-meta", String(id), uri.data],
-    queryFn: async (): Promise<Meta> => (await fetch(ipfs(uri.data!))).json(),
+    queryFn: async (): Promise<Meta> => fetchMeta(uri.data!),
     enabled: !!uri.data,
     staleTime: Infinity,
   });
