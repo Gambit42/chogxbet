@@ -121,7 +121,7 @@ export function Arena() {
         {!!open?.length && (
           <div className="flex flex-wrap items-center gap-3">
             <Tabs on={only} set={(t) => { setOnly(t); setPage(0); }} tabs={["All", "Real stakes", "Last Word"].map((t) => [t, t === "All" ? open.length : open.filter((d) => mode(d) === t).length])} />
-            <CallCta label="＋ Create" />
+            {w.connected && <CallCta label="＋ Create" />}
           </div>
         )}
       </div>
