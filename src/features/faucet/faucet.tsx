@@ -2,7 +2,7 @@
 /* eslint-disable @next/next/no-img-element -- Use the supplied Chog artwork. */
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
-import { ArrowUpRight, Check, ExternalLink } from "lucide-react";
+import { ArrowUpRight, Check, ExternalLink, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { formatEther, parseAbi, parseEther, parseEventLogs, type Abi, type Address, type Chain } from "viem";
 import { useBalance, useConfig, useReadContract, useReadContracts, useWriteContract } from "wagmi";
@@ -172,20 +172,22 @@ function StepCard({ step, n, image, balance, minted, done, current, wallet, read
   const config = useConfig();
   const queryClient = useQueryClient();
   const { writeContractAsync, isPending } = useWriteContract();
-  const [revealId, setRevealId] = useState<bigint>();
+  // Open while minting (no id yet), then holds the minted token id for the reveal.
+  const [reveal, setReveal] = useState<{ id?: bigint }>();
 
   const claim = async () => {
     if (!("contract" in step) || !step.contract || !wallet.address) return;
     let id: string | number | undefined;
     try {
       const hash = await writeContractAsync({ address: step.contract, abi: step.abi, functionName: "mint", args: step.args(wallet.address), chainId: chain.id });
-      id = toast.loading("Confirming on Monad Testnet…");
+      if (step.reveal) setReveal({});
+      else id = toast.loading("Confirming on Monad Testnet…");
       const { logs, status } = await waitForTransactionReceipt(config, { hash, chainId: chain.id });
       if (status !== "success") throw new Error();
       const [mint] = step.reveal ? parseEventLogs({ abi: transferAbi, eventName: "Transfer", logs }) : [];
       if (mint) {
-        toast.dismiss(id);
-        setRevealId(mint.args.tokenId);
+        // Stays closed if they dismissed it while minting; the card still flips to Done.
+        setReveal((r) => r && { id: mint.args.tokenId });
       } else {
         // Token claims' cta names the amount ("Claim 1,000 $CHOG").
         toast.success(`+${step.cta.replace(/^Claim /, "")}`, {
@@ -196,6 +198,7 @@ function StepCard({ step, n, image, balance, minted, done, current, wallet, read
       }
       queryClient.invalidateQueries();
     } catch (e) {
+      setReveal(undefined);
       toast.error((e as { shortMessage?: string }).shortMessage ?? "Transaction failed", { id });
     }
   };
@@ -295,22 +298,26 @@ function StepCard({ step, n, image, balance, minted, done, current, wallet, read
           </>
         )}
       </div>
-      {revealId !== undefined && <Reveal key={String(revealId)} id={revealId} onClose={() => setRevealId(undefined)} />}
+      {reveal && <Reveal id={reveal.id} onClose={() => setReveal(undefined)} />}
     </li>
   );
 }
 
-/** A freshly minted Chog arrives sealed, then reveals its art and traits on its own once the art loads. */
-function Reveal({ id, onClose }: { id: bigint; onClose: () => void }) {
+// Cycled every 2s while minting and loading the art, holding on the last, so the wait feels like progress.
+const MINTING = ["Minting your Chog…", "Confirming on Monad…", "Picking your Chog…", "Loading its artwork…", "Almost there…"];
+
+/** Opens while the mint confirms (no id yet), then reveals the Chog's art and traits on its own once the art loads. */
+function Reveal({ id, onClose }: { id?: bigint; onClose: () => void }) {
   const [revealed, setRevealed] = useState(false);
   const [artFailed, setArtFailed] = useState(false);
+  const [tick, setTick] = useState(0);
   useEffect(() => {
-    if (revealed) return;
+    if (revealed || id === undefined) return;
     // The mint is confirmed; unavailable metadata or artwork must not hold up the user.
     const timeout = setTimeout(() => setArtFailed(true), 15000);
     return () => clearTimeout(timeout);
-  }, [revealed]);
-  const uri = useReadContract({ address: nft, abi: nftAbi, functionName: "tokenURI", args: [id], chainId: chain.id });
+  }, [revealed, id]);
+  const uri = useReadContract({ address: nft, abi: nftAbi, functionName: "tokenURI", args: [id ?? BigInt(0)], chainId: chain.id, query: { enabled: id !== undefined } });
   const meta = useQuery({
     queryKey: ["chog-meta", uri.data],
     queryFn: async (): Promise<Meta> => fetchMeta(uri.data!),
@@ -318,30 +325,45 @@ function Reveal({ id, onClose }: { id: bigint; onClose: () => void }) {
     staleTime: Infinity,
   });
   const failed = uri.isError || meta.isError || artFailed;
+  const loading = !revealed && !failed;
+  useEffect(() => {
+    if (!loading) return;
+    const interval = setInterval(() => setTick((t) => Math.min(t + 1, MINTING.length - 1)), 2000);
+    return () => clearInterval(interval);
+  }, [loading]);
   const traits = meta.data?.attributes?.slice(0, 6) ?? [];
 
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
       <DialogContent className="gap-0 rounded-2xl bg-white p-5 sm:max-w-[380px]">
         <DialogTitle className="text-[19px] font-semibold tracking-[-.01em] text-[#1A1130]">
-          {revealed ? (meta.data?.name ?? `Chog #${id}`) : `Chog #${id} is yours`}
+          {revealed ? (meta.data?.name ?? `Chog #${id}`) : id === undefined ? "Minting your Chog" : `Chog #${id} is yours`}
         </DialogTitle>
         <DialogDescription className="mt-1 text-[14px] text-[#6B6185]">
-          {revealed ? "Your ticket into the Arena." : failed ? "Mint complete. The artwork is unavailable right now. You can continue playing." : "Summoning your Chog…"}
+          {revealed
+            ? "Your ticket into the Arena."
+            : failed
+              ? "Mint complete. The artwork is unavailable right now. You can continue playing."
+              : "Please wait, this only takes a few seconds."}
         </DialogDescription>
         <div className="relative mt-4 aspect-square overflow-hidden rounded-xl bg-[#1A1130]">
           {meta.data && (
             <img
               src={ipfs(meta.data.image)}
               alt={revealed ? meta.data.name : ""}
-              // Hold the sealed "?" a beat so the reveal reads as one, even when the art is cached.
+              // Hold the spinner a beat so the reveal reads as one, even when the art is cached.
               onLoad={() => setTimeout(() => setRevealed(true), 300)}
               onError={() => setArtFailed(true)}
               className={`size-full object-cover transition-[filter,scale] duration-700 ease-out motion-reduce:transition-none ${revealed ? "scale-100" : "scale-110 blur-2xl brightness-0"}`}
             />
           )}
-          {!revealed && (
-            <span aria-hidden className={`absolute inset-0 grid place-items-center text-[88px] font-semibold text-[#A391FF] ${failed ? "" : "animate-pulse"}`}>?</span>
+          {loading && (
+            <div className="absolute inset-0 flex flex-col items-center justify-center gap-4">
+              <Loader2 aria-hidden className="size-12 animate-spin text-[#A391FF]" />
+              <p key={tick} className="m-0 text-[15px] font-semibold text-white animate-in fade-in-0 duration-300">
+                {MINTING[tick]}
+              </p>
+            </div>
           )}
         </div>
         {revealed && traits.length > 0 && (
